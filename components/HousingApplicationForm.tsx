@@ -1,0 +1,816 @@
+'use client'
+
+import { useState, useEffect, useCallback, useRef } from 'react'
+import { useRouter } from 'next/navigation'
+import { supabase } from '@/lib/supabase'
+import toast from 'react-hot-toast'
+import { Save, ArrowRight, ArrowLeft } from 'lucide-react'
+
+const STORAGE_KEY_PREFIX = 'housing_form_draft_'
+
+// ولايات تونس الـ 24 (للعنوان الحالي)
+const TUNISIAN_GOVERNORATES = [
+  'أريانة', 'باجة', 'بن عروس', 'بنزرت', 'قابس', 'قفصة', 'جندوبة', 'القيروان', 'القصرين', 'قبلي', 'الكاف', 'المهدية', 'منوبة', 'مدنين', 'المنستير', 'نابل', 'صفاقس', 'سيدي بوزيد', 'سليانة', 'سوسة', 'تطاوين', 'توزر', 'تونس', 'زغوان',
+]
+
+// Form data type for استمارة برنامج السكن الاقتصادي السريع
+export interface HousingFormData {
+  // 1 المعطيات الشخصية
+  full_name?: string
+  national_id?: string
+  date_of_birth?: string
+  marital_status?: string
+  family_count?: number
+  children_ages?: string
+  phone?: string
+  email?: string
+  current_address?: string
+
+  // 2 الوضعية المهنية
+  employment_status?: string // موظف قار، بعقد، عامل حر، صاحب مشروع، عاطل
+  work_sector?: string // عمومي / خاص / غير منظم
+  net_monthly_income?: number
+  income_stable?: string // نعم / لا
+  extra_income?: string
+
+  // 3 الوضعية المالية
+  has_financial_obligations?: string // نعم / لا
+  total_monthly_obligations?: number
+  max_monthly_payment?: number
+  can_save_20_percent?: string // نعم / لا / جزئياً
+  down_payment_value?: number
+
+  // 4 الوضعية السكنية الحالية
+  current_housing_type?: string // كراء، ملك، سكن عائلي، بدون سكن قار
+  current_residence_duration?: string
+  current_rent_value?: number
+  housing_problems?: string[] // غلاء الكراء، ضيق المساحة، إلخ
+
+  // 5 العقار
+  owns_land?: string // نعم / لا
+  // إذا نعم (مسار أرض المواطن):
+  land_location?: string
+  land_address_gps?: string
+  land_area_sqm?: number
+  land_nature?: string // داخل بلدية، خارج بلدية، فلاحية
+  land_ownership_type?: string // ملك شخصي، مشترك، في طور التسوية
+  land_registered?: string
+  has_ownership_doc?: string
+  has_building_permit?: string
+  company_handle_permit?: string
+  land_legal_issues?: string
+  desired_housing_type_land?: string // اقتصادي أساسي/متوسط/مريح
+  custom_design_or_ready?: string
+  rooms_count_land?: number
+  want_future_floor?: string
+  service_type?: string // Gros œuvre, تشطيب متوسط, Clé en main
+  pay_down_direct?: string
+  want_installment_building_only?: string
+  installment_years_land?: string // 5,10,15,20
+  // إذا لا (مسار شراء أرض + بناء):
+  company_provide_full_property?: string
+
+  // 6 نموذج السكن المطلوب
+  housing_model?: string // 60, 80, 100 m²
+  accept_area_adjustment?: string
+
+  // 7 مدة التقسيط
+  installment_period?: string // 10, 15, 20
+
+  // 8 الشراكة مع الدولة
+  agree_state_referral?: string
+  previous_social_housing?: string
+  registered_social_affairs?: string
+  accept_social_economic_housing?: string
+  accept_followup_via_platform?: string
+
+  // 9 معلومات إضافية
+  additional_info?: string
+}
+
+const TOTAL_SECTIONS = 11
+
+function getStorageKey(userId: string | null): string {
+  return `${STORAGE_KEY_PREFIX}${userId || 'guest'}`
+}
+
+export default function HousingApplicationForm() {
+  const router = useRouter()
+  const formTopRef = useRef<HTMLDivElement>(null)
+  const [currentSection, setCurrentSection] = useState(1)
+  const [loading, setLoading] = useState(false)
+  const [formData, setFormData] = useState<Partial<HousingFormData>>({})
+  const [userId, setUserId] = useState<string | null>(null)
+  const [hydrationDone, setHydrationDone] = useState(false)
+
+  // Load draft from localStorage on mount
+  useEffect(() => {
+    const loadDraft = async () => {
+      try {
+        const { data: { user } } = await supabase.auth.getUser()
+        const uid = user?.id || null
+        setUserId(uid)
+        const key = getStorageKey(uid)
+        const raw = typeof window !== 'undefined' ? localStorage.getItem(key) : null
+        if (raw) {
+          try {
+            const parsed = JSON.parse(raw) as { formData?: Partial<HousingFormData>; currentSection?: number }
+            if (parsed.formData) setFormData(parsed.formData)
+            if (typeof parsed.currentSection === 'number' && parsed.currentSection >= 1 && parsed.currentSection <= TOTAL_SECTIONS) {
+              setCurrentSection(parsed.currentSection)
+            }
+          } catch (_) {}
+        }
+      } catch (_) {}
+      setHydrationDone(true)
+    }
+    loadDraft()
+  }, [])
+
+  // Persist draft to localStorage (formData + currentSection + last answer)
+  const saveDraft = useCallback(() => {
+    if (!hydrationDone || typeof window === 'undefined') return
+    const key = getStorageKey(userId)
+    try {
+      localStorage.setItem(key, JSON.stringify({
+        formData,
+        currentSection,
+        lastSaved: new Date().toISOString(),
+      }))
+    } catch (_) {}
+  }, [formData, currentSection, userId, hydrationDone])
+
+  useEffect(() => {
+    if (!hydrationDone) return
+    saveDraft()
+  }, [formData, currentSection, hydrationDone, saveDraft])
+
+  // Save on page close/refresh
+  useEffect(() => {
+    if (!hydrationDone) return
+    const onBeforeUnload = () => saveDraft()
+    window.addEventListener('beforeunload', onBeforeUnload)
+    return () => window.removeEventListener('beforeunload', onBeforeUnload)
+  }, [saveDraft, hydrationDone])
+
+  const updateFormData = (field: keyof HousingFormData, value: any) => {
+    setFormData(prev => ({ ...prev, [field]: value }))
+  }
+
+  const handleSubmit = async () => {
+    const { data: { user } } = await supabase.auth.getUser()
+    if (!user) {
+      toast.error('يرجى تسجيل الدخول أولاً')
+      router.push('/auth/login')
+      return
+    }
+
+    // تحقق مبدئي من القسم 1: إرشاد المستخدم لموقع الخطأ
+    const needName = !(formData.full_name || '').trim()
+    const needGov = !(formData.current_address || '').trim()
+    if (needName || needGov) {
+      setCurrentSection(1)
+      setTimeout(() => formTopRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' }), 100)
+      toast.error(needName ? 'يرجى إدخال الاسم واللقب' : 'يرجى اختيار الولاية')
+      return
+    }
+
+    setLoading(true)
+    try {
+      const maritalMap: Record<string, string> = { أعزب: 'single', متزوج: 'married', مطلق: 'divorced', أرمل: 'widowed' }
+      const first = (formData.full_name || '').trim().split(/\s+/)[0] || ''
+      const last = (formData.full_name || '').trim().split(/\s+/).slice(1).join(' ') || ''
+
+      const payload = {
+        user_id: user.id,
+        status: 'in_progress',
+        first_name: first || '—',
+        last_name: last || '—',
+        national_id: formData.national_id || '',
+        date_of_birth: formData.date_of_birth || new Date().toISOString().slice(0, 10),
+        email: formData.email || '',
+        marital_status: (formData.marital_status && maritalMap[formData.marital_status]) ? maritalMap[formData.marital_status] : 'single',
+        number_of_children: formData.family_count ?? 0,
+        net_monthly_income: formData.net_monthly_income ?? null,
+        monthly_obligations: formData.total_monthly_obligations ?? null,
+        governorate: formData.current_address || '',
+        desired_housing_type: 'apartment' as const,
+        maximum_budget: formData.max_monthly_payment ?? null,
+        required_area: formData.housing_model ? parseInt(formData.housing_model, 10) : null,
+      }
+
+      const { data: inserted, error } = await supabase
+        .from('housing_applications')
+        .insert(payload)
+        .select()
+        .single()
+
+      if (error) {
+        console.error('Application submission error:', error)
+        setCurrentSection(1)
+        setTimeout(() => formTopRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' }), 100)
+        throw error
+      }
+
+      if (inserted?.id) {
+        try {
+          await supabase.rpc('calculate_application_score', { app_id: inserted.id })
+        } catch (_) {}
+      }
+
+      const key = getStorageKey(user.id)
+      try {
+        localStorage.removeItem(key)
+      } catch (_) {}
+
+      toast.success('تم إرسال الطلب بنجاح')
+      router.replace('/dashboard/applicant')
+    } catch (error: any) {
+      const msg = error.message || 'فشل إرسال الطلب'
+      toast.error(msg)
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  const nextSection = () => {
+    if (currentSection < TOTAL_SECTIONS) setCurrentSection(currentSection + 1)
+    else handleSubmit()
+  }
+
+  const prevSection = () => {
+    if (currentSection > 1) setCurrentSection(currentSection - 1)
+  }
+
+  const toggleProblem = (value: string) => {
+    const arr = formData.housing_problems || []
+    const next = arr.includes(value) ? arr.filter(p => p !== value) : [...arr, value]
+    updateFormData('housing_problems', next)
+  }
+
+  if (!hydrationDone) {
+    return (
+      <div className="max-w-4xl mx-auto px-4 py-8 flex justify-center">
+        <div className="spinner w-8 h-8"></div>
+      </div>
+    )
+  }
+
+  return (
+    <div ref={formTopRef} className="max-w-[28rem] mx-auto px-4 py-6 pb-32 touch-manipulation" style={{ touchAction: 'manipulation' }}>
+      <div className="card rounded-3xl shadow-soft relative bg-white">
+        <div className="mb-6">
+          <h1 className="text-xl font-bold text-gray-900 mb-1">استمارة رقمية</h1>
+          <p className="text-base font-medium text-gray-700 mb-1">تطبيق برنامج السكن الاقتصادي السريع</p>
+          <p className="text-gray-600 text-sm mb-2">تهدف هذه الاستمارة إلى دراسة وضعيتكم السكنية والمالية بدقة، قصد اقتراح الحل السكني الأنسب لكم.</p>
+          <p className="text-primary-600 text-xs font-medium">يتم حفظ تقدّمك تلقائياً — يمكنك إكمال الاستمارة لاحقاً من حيث توقّفت.</p>
+        </div>
+
+        {/* Progress — bar + section label only */}
+        <div className="mb-6">
+          <div className="flex items-center justify-between gap-3 mb-1.5">
+            <span className="text-xs font-medium text-gray-500">القسم {currentSection} من {TOTAL_SECTIONS}</span>
+            <select
+              value={currentSection}
+              onChange={(e) => setCurrentSection(Number(e.target.value))}
+              className="text-xs font-medium text-gray-600 bg-gray-50 border border-gray-200 rounded-lg px-2.5 py-1.5 outline-none focus:ring-1 focus:ring-primary-500"
+            >
+              {Array.from({ length: TOTAL_SECTIONS }, (_, i) => i + 1).map((s) => (
+                <option key={s} value={s}>القسم {s}</option>
+              ))}
+            </select>
+          </div>
+          <div className="w-full bg-gray-100 rounded-full h-1.5">
+            <div
+              className="bg-primary-500 h-1.5 rounded-full transition-all duration-300"
+              style={{ width: `${(currentSection / TOTAL_SECTIONS) * 100}%` }}
+            />
+          </div>
+        </div>
+
+        {/* Section 1: المعطيات الشخصية */}
+        {currentSection === 1 && (
+          <div className="space-y-4">
+            <h2 className="text-base font-bold text-gray-900 pb-3 border-b border-gray-100">1️⃣ المعطيات الشخصية</h2>
+            <div className="space-y-4">
+              <div>
+                <label className="form-label">الاسم واللقب</label>
+                <input type="text" value={formData.full_name || ''} onChange={(e) => updateFormData('full_name', e.target.value)} className="form-input" />
+              </div>
+              <div>
+                <label className="form-label">رقم بطاقة التعريف الوطنية</label>
+                <input type="text" value={formData.national_id || ''} onChange={(e) => updateFormData('national_id', e.target.value)} className="form-input" />
+              </div>
+              <div>
+                <label className="form-label">تاريخ الولادة</label>
+                <input type="date" value={formData.date_of_birth || ''} onChange={(e) => updateFormData('date_of_birth', e.target.value)} className="form-input" />
+              </div>
+              <div>
+                <label className="form-label">الحالة الاجتماعية</label>
+                <select value={formData.marital_status || ''} onChange={(e) => updateFormData('marital_status', e.target.value)} className="form-input">
+                  <option value="">اختر...</option>
+                  <option value="أعزب">أعزب</option>
+                  <option value="متزوج">متزوج</option>
+                  <option value="مطلق">مطلق</option>
+                  <option value="أرمل">أرمل</option>
+                </select>
+              </div>
+              <div>
+                <label className="form-label">عدد أفراد العائلة</label>
+                <input type="number" min={0} value={formData.family_count ?? ''} onChange={(e) => updateFormData('family_count', e.target.value === '' ? undefined : parseInt(e.target.value, 10))} className="form-input" />
+              </div>
+              <div>
+                <label className="form-label">أعمار الأطفال (إن وجدوا)</label>
+                <input type="text" value={formData.children_ages || ''} onChange={(e) => updateFormData('children_ages', e.target.value)} className="form-input" placeholder="مثال: 5، 8، 12" />
+              </div>
+              <div>
+                <label className="form-label">رقم الهاتف</label>
+                <input type="tel" value={formData.phone || ''} onChange={(e) => updateFormData('phone', e.target.value)} className="form-input" />
+              </div>
+              <div>
+                <label className="form-label">البريد الإلكتروني (اختياري)</label>
+                <input type="email" value={formData.email || ''} onChange={(e) => updateFormData('email', e.target.value)} className="form-input" />
+              </div>
+              <div>
+                <label className="form-label">العنوان الحالي (ولاية)</label>
+                <select value={formData.current_address || ''} onChange={(e) => updateFormData('current_address', e.target.value)} className="form-input">
+                  <option value="">اختر الولاية...</option>
+                  {TUNISIAN_GOVERNORATES.map((g) => (
+                    <option key={g} value={g}>{g}</option>
+                  ))}
+                </select>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Section 2: الوضعية المهنية */}
+        {currentSection === 2 && (
+          <div className="space-y-6">
+            <h2 className="text-xl font-bold border-b pb-2">2️⃣ الوضعية المهنية</h2>
+            <div>
+              <label className="form-label">الوضعية المهنية:</label>
+              <select value={formData.employment_status || ''} onChange={(e) => updateFormData('employment_status', e.target.value)} className="form-input">
+                <option value="">اختر...</option>
+                <option value="موظف قار">موظف قار</option>
+                <option value="موظف بعقد">موظف بعقد</option>
+                <option value="عامل حر">عامل حر</option>
+                <option value="صاحب مشروع">صاحب مشروع</option>
+                <option value="عاطل عن العمل">عاطل عن العمل</option>
+              </select>
+            </div>
+            <div>
+              <label className="form-label">قطاع العمل (عمومي / خاص / غير منظم)</label>
+              <select value={formData.work_sector || ''} onChange={(e) => updateFormData('work_sector', e.target.value)} className="form-input">
+                <option value="">اختر...</option>
+                <option value="عمومي">عمومي</option>
+                <option value="خاص">خاص</option>
+                <option value="غير منظم">غير منظم</option>
+              </select>
+            </div>
+            <div>
+              <label className="form-label">الدخل الشهري الصافي التقريبي</label>
+              <input type="number" min={0} step={0.01} value={formData.net_monthly_income ?? ''} onChange={(e) => updateFormData('net_monthly_income', e.target.value === '' ? undefined : parseFloat(e.target.value))} className="form-input" />
+            </div>
+            <div>
+              <label className="form-label">هل الدخل قار؟ (نعم / لا)</label>
+              <select value={formData.income_stable || ''} onChange={(e) => updateFormData('income_stable', e.target.value)} className="form-input">
+                <option value="">اختر...</option>
+                <option value="نعم">نعم</option>
+                <option value="لا">لا</option>
+              </select>
+            </div>
+            <div>
+              <label className="form-label">مداخيل إضافية (إن وجدت)</label>
+              <input type="text" value={formData.extra_income || ''} onChange={(e) => updateFormData('extra_income', e.target.value)} className="form-input" placeholder="اختياري" />
+            </div>
+          </div>
+        )}
+
+        {/* Section 3: الوضعية المالية */}
+        {currentSection === 3 && (
+          <div className="space-y-6">
+            <h2 className="text-xl font-bold border-b pb-2">3️⃣ الوضعية المالية</h2>
+            <div>
+              <label className="form-label">هل لديك التزامات مالية حالية؟ (قروض / كراء / أخرى)</label>
+              <select value={formData.has_financial_obligations || ''} onChange={(e) => updateFormData('has_financial_obligations', e.target.value)} className="form-input">
+                <option value="">اختر...</option>
+                <option value="نعم">نعم</option>
+                <option value="لا">لا</option>
+              </select>
+            </div>
+            <div>
+              <label className="form-label">القيمة الجملية للالتزامات الشهرية (د.ت)</label>
+              <input type="number" min={0} step={0.01} value={formData.total_monthly_obligations ?? ''} onChange={(e) => updateFormData('total_monthly_obligations', e.target.value === '' ? undefined : parseFloat(e.target.value))} className="form-input" />
+            </div>
+            <div>
+              <label className="form-label">القدرة القصوى على الدفع الشهري للسكن (د.ت)</label>
+              <input type="number" min={0} step={0.01} value={formData.max_monthly_payment ?? ''} onChange={(e) => updateFormData('max_monthly_payment', e.target.value === '' ? undefined : parseFloat(e.target.value))} className="form-input" />
+            </div>
+            <div>
+              <label className="form-label">هل يمكنك توفير تسبقة في حدود 20%؟ (نعم / لا / جزئياً)</label>
+              <select value={formData.can_save_20_percent || ''} onChange={(e) => updateFormData('can_save_20_percent', e.target.value)} className="form-input">
+                <option value="">اختر...</option>
+                <option value="نعم">نعم</option>
+                <option value="لا">لا</option>
+                <option value="جزئياً">جزئياً</option>
+              </select>
+            </div>
+            <div>
+              <label className="form-label">القيمة التقريبية للتسبقة المتوفرة (د.ت)</label>
+              <input type="number" min={0} step={0.01} value={formData.down_payment_value ?? ''} onChange={(e) => updateFormData('down_payment_value', e.target.value === '' ? undefined : parseFloat(e.target.value))} className="form-input" />
+            </div>
+          </div>
+        )}
+
+        {/* Section 4: الوضعية السكنية الحالية */}
+        {currentSection === 4 && (
+          <div className="space-y-6">
+            <h2 className="text-xl font-bold border-b pb-2">4️⃣ الوضعية السكنية الحالية</h2>
+            <div>
+              <label className="form-label">نوع السكن الحالي:</label>
+              <select value={formData.current_housing_type || ''} onChange={(e) => updateFormData('current_housing_type', e.target.value)} className="form-input">
+                <option value="">اختر...</option>
+                <option value="كراء">كراء</option>
+                <option value="ملك">ملك</option>
+                <option value="سكن عائلي">سكن عائلي</option>
+                <option value="بدون سكن قار">بدون سكن قار</option>
+              </select>
+            </div>
+            <div>
+              <label className="form-label">مدة الإقامة في السكن الحالي</label>
+              <input type="text" value={formData.current_residence_duration || ''} onChange={(e) => updateFormData('current_residence_duration', e.target.value)} className="form-input" placeholder="مثال: 3 سنوات" />
+            </div>
+            <div>
+              <label className="form-label">قيمة الكراء (إن وجد) (د.ت)</label>
+              <input type="number" min={0} value={formData.current_rent_value ?? ''} onChange={(e) => updateFormData('current_rent_value', e.target.value === '' ? undefined : parseFloat(e.target.value))} className="form-input" />
+            </div>
+            <div>
+              <label className="form-label">أبرز المشاكل (اختر ما ينطبق)</label>
+              <div className="space-y-2">
+                {['غلاء الكراء', 'ضيق المساحة', 'خطر الإخلاء', 'بعد السكن عن العمل', 'أخرى'].map((p) => (
+                  <label key={p} className="flex items-center gap-2">
+                    <input type="checkbox" checked={(formData.housing_problems || []).includes(p)} onChange={() => toggleProblem(p)} className="rounded" />
+                    <span>{p}</span>
+                  </label>
+                ))}
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Section 5: العقار */}
+        {currentSection === 5 && (
+          <div className="space-y-6">
+            <h2 className="text-xl font-bold border-b pb-2">5️⃣ العقار</h2>
+            <div>
+              <label className="form-label">هل تملك أرضاً صالحة للبناء؟</label>
+              <select value={formData.owns_land || ''} onChange={(e) => updateFormData('owns_land', e.target.value)} className="form-input">
+                <option value="">اختر...</option>
+                <option value="نعم">نعم</option>
+                <option value="لا">لا</option>
+              </select>
+            </div>
+
+            {formData.owns_land === 'نعم' && (
+              <>
+                <div className="rounded-lg bg-primary-50 p-4 my-4">
+                  <p className="text-sm text-primary-800 font-medium">هذا المسار مخصص للمواطن الذي يملك قطعة أرض ويرغب في أن تتولى الشركة بناء المسكن عليها.</p>
+                </div>
+                <p className="text-sm font-semibold text-gray-800 mt-4 mb-2">🔹 تفاصيل الأرض</p>
+                <div className="grid md:grid-cols-2 gap-4">
+                  <div className="md:col-span-2">
+                    <label className="form-label">موقع الأرض بالتفصيل (ولاية / معتمدية / عمادة)</label>
+                    <input type="text" value={formData.land_location || ''} onChange={(e) => updateFormData('land_location', e.target.value)} className="form-input" />
+                  </div>
+                  <div className="md:col-span-2">
+                    <label className="form-label">عنوان تقريبي أو نقطة GPS (اختياري)</label>
+                    <input type="text" value={formData.land_address_gps || ''} onChange={(e) => updateFormData('land_address_gps', e.target.value)} className="form-input" placeholder="اختياري" />
+                  </div>
+                  <div>
+                    <label className="form-label">مساحة الأرض بالمتر المربع</label>
+                    <input type="number" min={0} value={formData.land_area_sqm ?? ''} onChange={(e) => updateFormData('land_area_sqm', e.target.value === '' ? undefined : parseFloat(e.target.value))} className="form-input" />
+                  </div>
+                  <div>
+                    <label className="form-label">طبيعة الأرض</label>
+                    <select value={formData.land_nature || ''} onChange={(e) => updateFormData('land_nature', e.target.value)} className="form-input">
+                      <option value="">اختر...</option>
+                      <option value="داخل منطقة بلدية">داخل منطقة بلدية</option>
+                      <option value="خارج المنطقة البلدية">خارج المنطقة البلدية</option>
+                      <option value="منطقة فلاحية">منطقة فلاحية</option>
+                    </select>
+                  </div>
+                  <div>
+                    <label className="form-label">نوع الملكية</label>
+                    <select value={formData.land_ownership_type || ''} onChange={(e) => updateFormData('land_ownership_type', e.target.value)} className="form-input">
+                      <option value="">اختر...</option>
+                      <option value="ملك شخصي">ملك شخصي</option>
+                      <option value="ملك مشترك">ملك مشترك</option>
+                      <option value="في طور التسوية">في طور التسوية</option>
+                    </select>
+                  </div>
+                  <div>
+                    <label className="form-label">هل الأرض مسجلة بالرسم العقاري؟ (نعم / لا)</label>
+                    <select value={formData.land_registered || ''} onChange={(e) => updateFormData('land_registered', e.target.value)} className="form-input">
+                      <option value="">اختر...</option>
+                      <option value="نعم">نعم</option>
+                      <option value="لا">لا</option>
+                    </select>
+                  </div>
+                  <div>
+                    <label className="form-label">هل تتوفر وثيقة ملكية أو عقد شراء؟ (نعم / لا)</label>
+                    <select value={formData.has_ownership_doc || ''} onChange={(e) => updateFormData('has_ownership_doc', e.target.value)} className="form-input">
+                      <option value="">اختر...</option>
+                      <option value="نعم">نعم</option>
+                      <option value="لا">لا</option>
+                    </select>
+                  </div>
+                  <div className="md:col-span-2">
+                    <p className="text-sm font-semibold text-gray-800 mt-4 mb-2">🔹 الوضعية القانونية والإدارية</p>
+                  </div>
+                  <div>
+                    <label className="form-label">هل توجد رخصة بناء حالياً؟ (نعم / لا)</label>
+                    <select value={formData.has_building_permit || ''} onChange={(e) => updateFormData('has_building_permit', e.target.value)} className="form-input">
+                      <option value="">اختر...</option>
+                      <option value="نعم">نعم</option>
+                      <option value="لا">لا</option>
+                    </select>
+                  </div>
+                  {formData.has_building_permit === 'لا' && (
+                    <div>
+                      <label className="form-label">إذا لا: هل ترغب أن تتولى الشركة إعداد ملف الرخصة؟ (نعم / لا)</label>
+                      <select value={formData.company_handle_permit || ''} onChange={(e) => updateFormData('company_handle_permit', e.target.value)} className="form-input">
+                        <option value="">اختر...</option>
+                        <option value="نعم">نعم</option>
+                        <option value="لا">لا</option>
+                      </select>
+                    </div>
+                  )}
+                  <div>
+                    <label className="form-label">هل توجد قيود قانونية أو نزاع على الأرض؟ (نعم / لا)</label>
+                    <select value={formData.land_legal_issues || ''} onChange={(e) => updateFormData('land_legal_issues', e.target.value)} className="form-input">
+                      <option value="">اختر...</option>
+                      <option value="نعم">نعم</option>
+                      <option value="لا">لا</option>
+                    </select>
+                  </div>
+                  <div className="md:col-span-2">
+                    <p className="text-sm font-semibold text-gray-800 mt-4 mb-2">🔹 تفاصيل المشروع المطلوب</p>
+                  </div>
+                  <div>
+                    <label className="form-label">نوع المسكن المرغوب</label>
+                    <select value={formData.desired_housing_type_land || ''} onChange={(e) => updateFormData('desired_housing_type_land', e.target.value)} className="form-input">
+                      <option value="">اختر...</option>
+                      <option value="اقتصادي أساسي">اقتصادي أساسي</option>
+                      <option value="اقتصادي متوسط">اقتصادي متوسط</option>
+                      <option value="اقتصادي مريح">اقتصادي مريح</option>
+                    </select>
+                  </div>
+                  <div>
+                    <label className="form-label">هل ترغب في تصميم خاص أم نموذج جاهز؟</label>
+                    <select value={formData.custom_design_or_ready || ''} onChange={(e) => updateFormData('custom_design_or_ready', e.target.value)} className="form-input">
+                      <option value="">اختر...</option>
+                      <option value="تصميم خاص">تصميم خاص</option>
+                      <option value="نموذج جاهز">نموذج جاهز</option>
+                    </select>
+                  </div>
+                  <div>
+                    <label className="form-label">عدد الغرف المطلوبة</label>
+                    <input type="number" min={0} value={formData.rooms_count_land ?? ''} onChange={(e) => updateFormData('rooms_count_land', e.target.value === '' ? undefined : parseInt(e.target.value, 10))} className="form-input" />
+                  </div>
+                  <div>
+                    <label className="form-label">هل ترغب في طابق إضافي مستقبلاً؟ (نعم / لا)</label>
+                    <select value={formData.want_future_floor || ''} onChange={(e) => updateFormData('want_future_floor', e.target.value)} className="form-input">
+                      <option value="">اختر...</option>
+                      <option value="نعم">نعم</option>
+                      <option value="لا">لا</option>
+                    </select>
+                  </div>
+                  <div className="md:col-span-2">
+                    <p className="text-sm font-semibold text-gray-800 mt-4 mb-2">🔹 نوع خدمة الشركة</p>
+                    <label className="form-label">اختر الخدمة المطلوبة</label>
+                    <select value={formData.service_type || ''} onChange={(e) => updateFormData('service_type', e.target.value)} className="form-input">
+                      <option value="">اختر...</option>
+                      <option value="بناء الهيكل فقط (Gros œuvre)">بناء الهيكل فقط (Gros œuvre)</option>
+                      <option value="بناء مع التشطيب المتوسط">بناء مع التشطيب المتوسط</option>
+                      <option value="مسكن جاهز للسكن (Clé en main)">مسكن جاهز للسكن (Clé en main)</option>
+                    </select>
+                  </div>
+                  <div className="md:col-span-2">
+                    <p className="text-sm font-semibold text-gray-800 mt-4 mb-2">🔹 التمويل</p>
+                  </div>
+                  <div>
+                    <label className="form-label">هل ستدفع التسبقة (20%) مباشرة؟ (نعم / لا / جزئياً)</label>
+                    <select value={formData.pay_down_direct || ''} onChange={(e) => updateFormData('pay_down_direct', e.target.value)} className="form-input">
+                      <option value="">اختر...</option>
+                      <option value="نعم">نعم</option>
+                      <option value="لا">لا</option>
+                      <option value="جزئياً">جزئياً</option>
+                    </select>
+                  </div>
+            <div>
+              <label className="form-label">هل ترغب في تقسيط تكلفة البناء فقط؟ (نعم / لا)</label>
+              <select value={formData.want_installment_building_only || ''} onChange={(e) => updateFormData('want_installment_building_only', e.target.value)} className="form-input">
+                      <option value="">اختر...</option>
+                      <option value="نعم">نعم</option>
+                      <option value="لا">لا</option>
+                    </select>
+                  </div>
+                  <div>
+                    <label className="form-label">مدة التقسيط المقترحة</label>
+                    <select value={formData.installment_years_land || ''} onChange={(e) => updateFormData('installment_years_land', e.target.value)} className="form-input">
+                      <option value="">اختر...</option>
+                      <option value="5">5 سنوات</option>
+                      <option value="10">10 سنوات</option>
+                      <option value="15">15 سنة</option>
+                      <option value="20">20 سنة</option>
+                    </select>
+                  </div>
+                </div>
+                <p className="text-sm font-semibold text-gray-800 mt-4 mb-2">🔹 الوثائق المطلوبة لهذا المسار</p>
+                <p className="text-sm text-gray-600">يرجى تحميل: وثيقة ملكية الأرض، مخطط موقع الأرض، نسخة بطاقة التعريف، رخصة البناء إن وجدت.</p>
+              </>
+            )}
+
+            {formData.owns_land === 'لا' && (
+              <div>
+                <label className="form-label">هل ترغب أن توفّر الشركة العقار كاملاً؟ (مسار شراء أرض + بناء)</label>
+                <select value={formData.company_provide_full_property || ''} onChange={(e) => updateFormData('company_provide_full_property', e.target.value)} className="form-input">
+                  <option value="">اختر...</option>
+                  <option value="نعم">نعم</option>
+                  <option value="لا">لا</option>
+                </select>
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* Section 6: نموذج السكن المطلوب */}
+        {currentSection === 6 && (
+          <div className="space-y-6">
+            <h2 className="text-xl font-bold border-b pb-2">6️⃣ نموذج السكن المطلوب</h2>
+            <div>
+              <label className="form-label">اختر النموذج المناسب:</label>
+              <select value={formData.housing_model || ''} onChange={(e) => updateFormData('housing_model', e.target.value)} className="form-input">
+                <option value="">اختر...</option>
+                <option value="60">نموذج 60 م² (سكن اقتصادي أساسي)</option>
+                <option value="80">نموذج 80 م² (سكن اقتصادي متوسط)</option>
+                <option value="100">نموذج 100 م² (سكن اقتصادي مريح)</option>
+              </select>
+            </div>
+            <div>
+              <label className="form-label">هل تقبل بتعديل المساحة حسب قدرتك المالية؟ (نعم / لا)</label>
+              <select value={formData.accept_area_adjustment || ''} onChange={(e) => updateFormData('accept_area_adjustment', e.target.value)} className="form-input">
+                <option value="">اختر...</option>
+                <option value="نعم">نعم</option>
+                <option value="لا">لا</option>
+              </select>
+            </div>
+          </div>
+        )}
+
+        {/* Section 7: مدة التقسيط */}
+        {currentSection === 7 && (
+          <div className="space-y-6">
+            <h2 className="text-xl font-bold border-b pb-2">7️⃣ مدة التقسيط</h2>
+            <div>
+              <label className="form-label">اختر مدة التقسيط:</label>
+              <select value={formData.installment_period || ''} onChange={(e) => updateFormData('installment_period', e.target.value)} className="form-input">
+                <option value="">اختر...</option>
+                <option value="10">10 سنوات</option>
+                <option value="15">15 سنة</option>
+                <option value="20">20 سنة</option>
+              </select>
+            </div>
+          </div>
+        )}
+
+        {/* Section 8: الشراكة مع الدولة */}
+        {currentSection === 8 && (
+          <div className="space-y-6">
+            <h2 className="text-xl font-bold border-b pb-2">8️⃣ الشراكة مع الدولة والسكن الاجتماعي</h2>
+            <div>
+              <label className="form-label">هل توافق على إحالة ملفك إلى هياكل الدولة أو ديوان السكن في حال استوجب الأمر؟</label>
+              <select value={formData.agree_state_referral || ''} onChange={(e) => updateFormData('agree_state_referral', e.target.value)} className="form-input">
+                <option value="">اختر...</option>
+                <option value="نعم">نعم</option>
+                <option value="لا">لا</option>
+              </select>
+            </div>
+            <div>
+              <label className="form-label">هل سبق لك الانتفاع ببرنامج سكن اجتماعي أو FOPROLOS؟</label>
+              <select value={formData.previous_social_housing || ''} onChange={(e) => updateFormData('previous_social_housing', e.target.value)} className="form-input">
+                <option value="">اختر...</option>
+                <option value="نعم">نعم</option>
+                <option value="لا">لا</option>
+              </select>
+            </div>
+            <div>
+              <label className="form-label">هل أنت مسجّل لدى الشؤون الاجتماعية أو ضمن قائمة الأولويات؟</label>
+              <select value={formData.registered_social_affairs || ''} onChange={(e) => updateFormData('registered_social_affairs', e.target.value)} className="form-input">
+                <option value="">اختر...</option>
+                <option value="نعم">نعم</option>
+                <option value="لا">لا</option>
+              </select>
+            </div>
+            <div>
+              <label className="form-label">هل تقبل بحلول سكن اجتماعي أو اقتصادي مدعّم؟</label>
+              <select value={formData.accept_social_economic_housing || ''} onChange={(e) => updateFormData('accept_social_economic_housing', e.target.value)} className="form-input">
+                <option value="">اختر...</option>
+                <option value="نعم">نعم</option>
+                <option value="لا">لا</option>
+              </select>
+            </div>
+            <div>
+              <label className="form-label">في حال قبول ملفك ضمن برنامج السكن الاجتماعي، هل توافق على المتابعة الإدارية عبر المنصة؟</label>
+              <select value={formData.accept_followup_via_platform || ''} onChange={(e) => updateFormData('accept_followup_via_platform', e.target.value)} className="form-input">
+                <option value="">اختر...</option>
+                <option value="نعم">نعم</option>
+                <option value="لا">لا</option>
+              </select>
+            </div>
+          </div>
+        )}
+
+        {/* Section 9: معلومات إضافية */}
+        {currentSection === 9 && (
+          <div className="space-y-6">
+            <h2 className="text-xl font-bold border-b pb-2">9️⃣ معلومات إضافية</h2>
+            <div>
+              <label className="form-label">صف وضعيتك أو مشكلتك السكنية بإيجاز</label>
+              <textarea rows={5} value={formData.additional_info || ''} onChange={(e) => updateFormData('additional_info', e.target.value)} className="form-input" />
+            </div>
+          </div>
+        )}
+
+        {/* Section 10: وثائق (informational) */}
+        {currentSection === 10 && (
+          <div className="space-y-6">
+            <h2 className="text-xl font-bold border-b pb-2">9️⃣1️⃣ وثائق السكن الاجتماعي المطلوبة (عند الاقتضاء)</h2>
+            <p className="text-gray-600">في حال الترشح لبرنامج السكن الاجتماعي أو السكن المدعّم، يرجى تحميل الوثائق التالية عبر التطبيق:</p>
+            <ul className="list-disc list-inside space-y-2 text-gray-700">
+              <li>نسخة من بطاقة التعريف الوطنية</li>
+              <li>شهادة دخل أو شهادة عدم دخل</li>
+              <li>شهادة في الوضعية العائلية</li>
+              <li>شهادة تسجيل لدى الشؤون الاجتماعية (إن وجدت)</li>
+              <li>شهادة طبية أو بطاقة إعاقة (عند الاقتضاء)</li>
+              <li>وثيقة تثبت عدم امتلاك مسكن (عند الاقتضاء)</li>
+              <li>عقد كراء أو ما يثبت الوضعية السكنية الحالية</li>
+            </ul>
+          </div>
+        )}
+
+        {/* Section 11: التصريح والموافقة */}
+        {currentSection === 11 && (
+          <div className="space-y-6">
+            <h2 className="text-xl font-bold border-b pb-2">🔟 التصريح والموافقة</h2>
+            <p className="text-gray-700">
+              أصرّح بصحة المعلومات المصرّح بها، وأوافق على دراستها واقتراح الحل السكني الأنسب لي، مع إمكانية التنسيق مع هياكل الدولة عند الاقتضاء.
+            </p>
+            <p className="text-sm font-medium text-gray-800">☑️ أوافق</p>
+            <p className="text-sm text-gray-600">بالضغط على &quot;إرسال الطلب&quot; فإنك توافق على الشروط أعلاه.</p>
+            <div className="rounded-xl bg-gray-50 border border-gray-100 p-4">
+              <p className="text-sm font-semibold text-gray-800 mb-2">📌 بعد إرسال الاستمارة:</p>
+              <ul className="text-sm text-gray-600 space-y-1 list-disc list-inside">
+                <li>يتم تصنيف الملف (A / B / C)</li>
+                <li>يتم الاتصال بصاحب الطلب</li>
+                <li>اقتراح حل سكني مناسب</li>
+              </ul>
+            </div>
+          </div>
+        )}
+
+        {/* Navigation */}
+        <div className="flex gap-3 mt-8 pt-6 border-t border-gray-100 touch-manipulation">
+          <button
+            type="button"
+            onClick={prevSection}
+            disabled={currentSection === 1}
+            className="btn-secondary flex-1 flex items-center justify-center gap-2 py-4 rounded-2xl disabled:opacity-50 min-h-[48px]"
+          >
+            <ArrowRight className="w-4 h-4" />
+            السابق
+          </button>
+          <button
+            type="button"
+            onClick={nextSection}
+            disabled={loading}
+            className="btn-primary flex-1 flex items-center justify-center gap-2 py-4 rounded-2xl shadow-soft min-h-[48px]"
+          >
+            {currentSection === TOTAL_SECTIONS ? (
+              <>
+                {loading ? <span className="spinner ml-2"></span> : <Save className="w-4 h-4 ml-2" />}
+                إرسال الطلب
+              </>
+            ) : (
+              <>
+                التالي
+                <ArrowLeft className="w-4 h-4 mr-2" />
+              </>
+            )}
+          </button>
+        </div>
+      </div>
+    </div>
+  )
+}

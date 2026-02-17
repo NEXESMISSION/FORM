@@ -1,0 +1,328 @@
+1. Project Vision
+
+The application is a digital platform aimed at:
+
+Organizing affordable housing requests
+
+Matching supply with demand based on location and budget
+
+Reducing decision-making time
+
+Enabling investors to fund projects quickly
+
+Giving the company a clear view of the market before construction
+
+The application is not just a listing site, but a tool for urban planning, marketing, and finance.
+
+2. Types of Users in the Application
+1️⃣ Housing Applicant
+
+A person looking for affordable housing.
+
+2️⃣ Investor
+
+A person who wants to invest in a real estate project.
+
+3️⃣ Company Administration
+
+Responsible for:
+
+Reviewing applications
+
+Launching projects
+
+Managing financing
+
+3. Application Workflow
+Phase 1: User Registration
+
+Create an account using a phone number
+
+Receive SMS verification code
+
+Create a password
+
+Phase 2: Form Completion
+
+The user fills out their complete profile.
+
+After submission:
+
+The request is stored in the database
+
+Automatically analyzed
+
+Displayed to the company in the dashboard
+
+Phase 3: Request Analysis
+
+The application sorts requests by:
+
+Region
+
+Purchasing power
+
+Type of housing required
+
+Bank financing availability
+
+This helps the company decide:
+
+👉 Where to build
+👉 What to build
+👉 How many units to build
+
+4. Detailed Form for Housing Applicants
+Section 1: Personal Identity
+
+First and last name
+
+Date of birth
+
+National ID number
+
+Phone number
+
+Email address
+
+Section 2: Family Status
+
+Marital status
+
+Number of children
+
+Supports another family?
+
+Section 3: Employment Status
+
+Profession
+
+Contract type (permanent / temporary / self-employed)
+
+Employer
+
+Duration of current employment
+
+Net monthly income
+
+Section 4: Financial Status
+
+Total household income
+
+Monthly obligations
+
+Current loans
+
+Monthly saving capacity
+
+Section 5: Bank Financing
+
+Bank name
+
+Active bank account?
+
+Previously applied for a loan?
+
+Preliminary approval?
+
+Eligible for subsidized housing programs?
+
+Section 6: Current Housing Situation
+
+Living with family?
+
+Renting?
+
+Owns a home?
+
+Living in informal housing?
+
+Living in a rural area?
+
+Section 7: Desired Housing Characteristics
+
+Governorate
+
+District
+
+Proximity to workplace
+
+Proximity to schools
+
+Housing type:
+
+Individual housing
+
+Collective housing (apartment)
+
+Required area
+
+Number of rooms
+
+Maximum budget
+
+Acceptable delivery time
+
+5. Application Scoring System
+
+Each application receives points based on:
+
+Financial stability
+
+Family size
+
+Lack of home ownership
+
+Bank financing eligibility
+
+Result:
+
+🔹 Priority applicants are highlighted
+🔹 Construction decisions become easier
+
+6. Real Estate Projects Interface
+
+The application includes an interactive map.
+
+Each project displays:
+
+Project location
+
+Number of units
+
+Housing type
+
+Expected price
+
+Completion percentage
+
+Delivery date
+
+Project Categories
+
+Projects under study (not started yet)
+
+Projects under construction:
+
+90 days
+
+180 days
+
+1 year
+
+Ready-for-sale projects
+
+7. Investor Interface
+
+A dedicated interface including:
+
+Investment project profile
+
+Location study
+
+Land cost
+
+Construction cost
+
+Total cost
+
+Number of units
+
+Expected selling price
+
+Project duration
+
+Expected return
+
+Risk level
+
+Investor Functions
+
+Download project study (PDF)
+
+Request participation
+
+Specify investment amount
+
+Track project progress
+
+View completion percentage
+
+Monitor profits
+
+8. Back Office (Admin Dashboard)
+Request Management
+
+Classification by governorate
+
+Classification by income
+
+Classification by bank
+
+Identify real demand in each area
+
+Project Management
+
+Add projects
+
+Set map location
+
+Enter costs
+
+Enter construction duration
+
+Set expected price
+
+Investor Management
+
+Track contributions
+
+Calculate profits
+
+Distribute returns
+
+Generate financial reports
+
+9. Technical Requirements
+
+The application must:
+
+Work on mobile and web
+
+Load quickly
+
+Support Arabic and French
+
+Integrate with Google Maps
+
+Send SMS notifications
+
+Send push notifications
+
+10. Security and Data Protection
+
+Password encryption
+
+Personal data protection
+
+No sharing of banking information
+
+Compliance with Tunisian laws
+
+11. Application Reports
+
+The application should provide the company with:
+
+📊 Monthly demand report by region
+📊 Purchasing power report
+📊 Housing type demand report
+📊 Real estate market forecasts
+
+12. Final Objective of the Application
+
+The application is not only for sales, but also:
+
+✔ An urban planning tool
+✔ A market research tool
+✔ A financing tool
+✔ A marketing tool

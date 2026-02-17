@@ -1,0 +1,21 @@
+{
+  "name": "DOMOBAT — برنامج السكن الاقتصادي السريع",
+  "short_name": "DOMOBAT",
+  "description": "استمارة رقمية لدراسة الوضعية السكنية والمالية واقتراح الحل السكني الأنسب",
+  "id": "/",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "display_override": ["standalone", "minimal-ui", "browser"],
+  "background_color": "#ffffff",
+  "theme_color": "#2563eb",
+  "orientation": "portrait",
+  "lang": "ar",
+  "dir": "rtl",
+  "categories": ["housing", "government", "utilities"],
+  "icons": [
+    { "src": "/logo.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
+    { "src": "/logo.png", "sizes": "512x512", "type": "image/png", "purpose": "any" },
+    { "src": "/logo.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
+  ]
+}
