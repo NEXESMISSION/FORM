@@ -54,6 +54,7 @@ export default function RootLayout({
     <html lang="ar" dir="rtl">
       <head>
         <meta name="mobile-web-app-capable" content="yes" />
+        <link rel="icon" href="/logo.png" type="image/png" />
       </head>
       <body className="antialiased">
         {children}

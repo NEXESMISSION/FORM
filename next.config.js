@@ -6,6 +6,9 @@ const nextConfig = {
       { protocol: 'https', hostname: '**.supabase.co', pathname: '/**' },
     ],
   },
+  async redirects() {
+    return [{ source: '/favicon.ico', destination: '/logo.png', permanent: false }]
+  },
   // Ensure PWA manifest and static assets are served
   async headers() {
     return [

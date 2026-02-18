@@ -24,6 +24,22 @@ const STATUS_COLORS: Record<string, string> = {
   rejected: 'bg-red-100 text-red-800 border-red-200',
 }
 
+// المستندات المطلوبة افتراضياً (قد نطلبها لاحقاً)
+const DEFAULT_REQUIRED_DOCUMENTS = [
+  'نسخة بطاقة التعريف الوطنية',
+  'شهادة دخل أو شهادة عدم دخل',
+  'شهادة الإقامة أو عقد الكراء',
+  'شهادة العمل أو عقد الشغل',
+  'كشف حساب بنكي (آخر 3 أشهر)',
+]
+
+const MARITAL_LABELS: Record<string, string> = {
+  single: 'أعزب',
+  married: 'متزوج',
+  divorced: 'مطلق',
+  widowed: 'أرمل',
+}
+
 export default function HousingApplicationDetailPage() {
   const router = useRouter()
   const params = useParams()
@@ -130,6 +146,23 @@ export default function HousingApplicationDetailPage() {
           </div>
         )}
 
+        {/* المستندات المطلوبة (افتراضي + ما قد تطلبه الإدارة لاحقاً) */}
+        <div className="card mb-6">
+          <h3 className="text-sm font-semibold text-gray-900 mb-3">المستندات المطلوبة</h3>
+          <p className="text-xs text-gray-500 mb-3">قد نطلب منك لاحقاً إرفاق بعض المستندات التالية حسب مرحلة الطلب:</p>
+          <ul className="space-y-1.5 text-sm text-gray-700 list-disc list-inside">
+            {DEFAULT_REQUIRED_DOCUMENTS.map((doc, i) => (
+              <li key={i}>{doc}</li>
+            ))}
+          </ul>
+          {app.documents_requested_message && (
+            <div className="mt-3 pt-3 border-t border-gray-100">
+              <p className="text-xs font-medium text-amber-800 mb-1">طلب إضافي من الإدارة:</p>
+              <p className="text-sm text-amber-900 whitespace-pre-wrap">{app.documents_requested_message}</p>
+            </div>
+          )}
+        </div>
+
         {/* المستندات التي أرسلتها */}
         <div className="card mb-6">
           <h3 className="text-sm font-semibold text-gray-900 mb-3">المستندات المرفوعة</h3>
@@ -149,7 +182,7 @@ export default function HousingApplicationDetailPage() {
           )}
         </div>
 
-        {/* بيانات الطلب */}
+        {/* بيانات الطلب (تفاصيل الاستمارة) */}
         <div className="card mb-6">
           <h3 className="text-sm font-semibold text-gray-900 mb-3">بيانات الطلب</h3>
           <dl className="space-y-3 text-sm">
@@ -157,10 +190,14 @@ export default function HousingApplicationDetailPage() {
             <div><dt className="text-gray-500">البريد</dt><dd className="font-medium text-gray-900">{app.email || '—'}</dd></div>
             <div><dt className="text-gray-500">رقم البطاقة</dt><dd className="font-medium text-gray-900">{app.national_id || '—'}</dd></div>
             <div><dt className="text-gray-500">تاريخ الولادة</dt><dd className="font-medium text-gray-900">{app.date_of_birth ? new Date(app.date_of_birth).toLocaleDateString('ar-TN') : '—'}</dd></div>
+            <div><dt className="text-gray-500">الحالة الاجتماعية</dt><dd className="font-medium text-gray-900">{MARITAL_LABELS[app.marital_status] || app.marital_status || '—'}</dd></div>
+            {(app.number_of_children != null && app.number_of_children > 0) && <div><dt className="text-gray-500">عدد الأطفال</dt><dd className="font-medium text-gray-900">{app.number_of_children}</dd></div>}
             <div><dt className="text-gray-500">الولاية</dt><dd className="font-medium text-gray-900">{app.governorate || '—'}</dd></div>
             {app.net_monthly_income != null && <div><dt className="text-gray-500">الدخل الشهري (د.ت)</dt><dd className="font-medium text-gray-900">{app.net_monthly_income}</dd></div>}
+            {app.monthly_obligations != null && <div><dt className="text-gray-500">الالتزامات الشهرية (د.ت)</dt><dd className="font-medium text-gray-900">{app.monthly_obligations}</dd></div>}
             {app.maximum_budget != null && <div><dt className="text-gray-500">القدرة على الدفع (د.ت)</dt><dd className="font-medium text-gray-900">{app.maximum_budget}</dd></div>}
             {app.required_area != null && <div><dt className="text-gray-500">المساحة المطلوبة (م²)</dt><dd className="font-medium text-gray-900">{app.required_area}</dd></div>}
+            {app.desired_housing_type && <div><dt className="text-gray-500">نوع السكن المطلوب</dt><dd className="font-medium text-gray-900">{app.desired_housing_type === 'apartment' ? 'شقة' : app.desired_housing_type}</dd></div>}
           </dl>
         </div>
       </main>
