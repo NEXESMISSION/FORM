@@ -1,36 +1,11 @@
 import { NextRequest, NextResponse } from 'next/server'
+import { apiRateLimit } from '@/lib/security/rateLimiting'
+import { sanitizeInput } from '@/lib/security/sanitization'
+import { detectIntent } from '@/lib/utils/chatContext'
 
 // Ensure this route is handled at runtime
 export const runtime = 'nodejs'
 export const dynamic = 'force-dynamic'
-
-// Lazy load dependencies to avoid issues
-let apiRateLimit: any
-let sanitizeInput: any
-let detectIntent: any
-
-try {
-  const rateLimiting = require('@/lib/security/rateLimiting')
-  apiRateLimit = rateLimiting.apiRateLimit
-} catch (e) {
-  console.error('Failed to load rateLimiting:', e)
-}
-
-try {
-  const sanitization = require('@/lib/security/sanitization')
-  sanitizeInput = sanitization.sanitizeInput
-} catch (e) {
-  console.error('Failed to load sanitization:', e)
-  sanitizeInput = (str: string) => str
-}
-
-try {
-  const chatContext = require('@/lib/utils/chatContext')
-  detectIntent = chatContext.detectIntent
-} catch (e) {
-  console.error('Failed to load chatContext:', e)
-  detectIntent = () => null
-}
 
 const SYSTEM_PROMPT = `أنت مساعد ذكي وودود لخدمة DOMOBAT (دوموبات) — برنامج السكن الاقتصادي السريع في تونس.
 
@@ -137,43 +112,34 @@ const SYSTEM_PROMPT = `أنت مساعد ذكي وودود لخدمة DOMOBAT (�
 
 تذكر: أنت هنا لمساعدة الناس، كن صبوراً ومفيداً وودوداً.`
 
-export const POST = async (request: NextRequest) => {
-  // Check rate limit (applies to both authenticated and unauthenticated users)
-  let rateLimitResult = { allowed: true, remaining: 60, resetTime: Date.now() + 60000 }
-  if (apiRateLimit) {
-    try {
-      rateLimitResult = await apiRateLimit(request)
-    } catch (e) {
-      console.error('Rate limit check failed:', e)
-    }
-  }
-  
-  if (!rateLimitResult.allowed) {
-    return NextResponse.json(
-      { 
-        error: 'Too many requests. Please try again later.',
-        retryAfter: rateLimitResult.retryAfter 
-      },
-      { 
-        status: 429,
-        headers: {
-          'Retry-After': String(rateLimitResult.retryAfter || 60),
-          'X-RateLimit-Limit': '60',
-          'X-RateLimit-Remaining': String(rateLimitResult.remaining),
-        }
-      }
-    )
-  }
-
-  const apiKey = process.env.OPENAI_API_KEY
-  if (!apiKey) {
-    return NextResponse.json(
-      { error: 'Chat غير مفعّل. أضف OPENAI_API_KEY في .env.local' },
-      { status: 503 }
-    )
-  }
-
+export async function POST(request: NextRequest) {
   try {
+    // Check rate limit (applies to both authenticated and unauthenticated users)
+    const rateLimitResult = await apiRateLimit(request)
+    if (!rateLimitResult.allowed) {
+      return NextResponse.json(
+        { 
+          error: 'Too many requests. Please try again later.',
+          retryAfter: rateLimitResult.retryAfter 
+        },
+        { 
+          status: 429,
+          headers: {
+            'Retry-After': String(rateLimitResult.retryAfter || 60),
+            'X-RateLimit-Limit': '60',
+            'X-RateLimit-Remaining': String(rateLimitResult.remaining),
+          }
+        }
+      )
+    }
+
+    const apiKey = process.env.OPENAI_API_KEY
+    if (!apiKey) {
+      return NextResponse.json(
+        { error: 'Chat غير مفعّل. أضف OPENAI_API_KEY في .env.local' },
+        { status: 503 }
+      )
+    }
     const body = await request.json()
     const rawMessages: { role: string; content: string }[] = Array.isArray(body.messages) ? body.messages : []
     
@@ -197,14 +163,7 @@ export const POST = async (request: NextRequest) => {
 
     // Detect intent from last user message for better context
     const lastUserMessage = messages.filter(m => m.role === 'user').pop()?.content || ''
-    let intent = null
-    if (detectIntent) {
-      try {
-        intent = detectIntent(lastUserMessage)
-      } catch (e) {
-        console.error('Intent detection failed:', e)
-      }
-    }
+    const intent = detectIntent(lastUserMessage)
     
     // Add context hint to system message if intent detected
     let enhancedSystemPrompt = SYSTEM_PROMPT
@@ -245,7 +204,7 @@ export const POST = async (request: NextRequest) => {
     const rawContent = data.choices?.[0]?.message?.content ?? ''
     
     // Sanitize response content
-    const content = sanitizeInput ? sanitizeInput(rawContent) : rawContent
+    const content = sanitizeInput(rawContent)
     
     return NextResponse.json({ message: content })
   } catch (e) {
