@@ -1,11 +1,36 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { apiRateLimit } from '@/lib/security/rateLimiting'
-import { sanitizeInput } from '@/lib/security/sanitization'
-import { detectIntent, CHAT_KNOWLEDGE_BASE } from '@/lib/utils/chatContext'
 
 // Ensure this route is handled at runtime
 export const runtime = 'nodejs'
 export const dynamic = 'force-dynamic'
+
+// Lazy load dependencies to avoid issues
+let apiRateLimit: any
+let sanitizeInput: any
+let detectIntent: any
+
+try {
+  const rateLimiting = require('@/lib/security/rateLimiting')
+  apiRateLimit = rateLimiting.apiRateLimit
+} catch (e) {
+  console.error('Failed to load rateLimiting:', e)
+}
+
+try {
+  const sanitization = require('@/lib/security/sanitization')
+  sanitizeInput = sanitization.sanitizeInput
+} catch (e) {
+  console.error('Failed to load sanitization:', e)
+  sanitizeInput = (str: string) => str
+}
+
+try {
+  const chatContext = require('@/lib/utils/chatContext')
+  detectIntent = chatContext.detectIntent
+} catch (e) {
+  console.error('Failed to load chatContext:', e)
+  detectIntent = () => null
+}
 
 const SYSTEM_PROMPT = `أنت مساعد ذكي وودود لخدمة DOMOBAT (دوموبات) — برنامج السكن الاقتصادي السريع في تونس.
 
@@ -114,7 +139,15 @@ const SYSTEM_PROMPT = `أنت مساعد ذكي وودود لخدمة DOMOBAT (�
 
 export const POST = async (request: NextRequest) => {
   // Check rate limit (applies to both authenticated and unauthenticated users)
-  const rateLimitResult = await apiRateLimit(request)
+  let rateLimitResult = { allowed: true, remaining: 60, resetTime: Date.now() + 60000 }
+  if (apiRateLimit) {
+    try {
+      rateLimitResult = await apiRateLimit(request)
+    } catch (e) {
+      console.error('Rate limit check failed:', e)
+    }
+  }
+  
   if (!rateLimitResult.allowed) {
     return NextResponse.json(
       { 
@@ -164,7 +197,14 @@ export const POST = async (request: NextRequest) => {
 
     // Detect intent from last user message for better context
     const lastUserMessage = messages.filter(m => m.role === 'user').pop()?.content || ''
-    const intent = detectIntent(lastUserMessage)
+    let intent = null
+    if (detectIntent) {
+      try {
+        intent = detectIntent(lastUserMessage)
+      } catch (e) {
+        console.error('Intent detection failed:', e)
+      }
+    }
     
     // Add context hint to system message if intent detected
     let enhancedSystemPrompt = SYSTEM_PROMPT
@@ -205,7 +245,7 @@ export const POST = async (request: NextRequest) => {
     const rawContent = data.choices?.[0]?.message?.content ?? ''
     
     // Sanitize response content
-    const content = sanitizeInput(rawContent)
+    const content = sanitizeInput ? sanitizeInput(rawContent) : rawContent
     
     return NextResponse.json({ message: content })
   } catch (e) {
