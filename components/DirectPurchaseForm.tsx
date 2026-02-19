@@ -78,6 +78,12 @@ export default function DirectPurchaseForm({
     setUploadedFiles((prev) => prev.filter(f => f.id !== fileId))
   }
 
+  // Storage keys must be ASCII; Arabic docType is stored in JSON metadata only
+  const safePathSegment = (label: string, index: number) => {
+    const ascii = label.replace(/[^a-zA-Z0-9_-]/g, '-').replace(/-+/g, '-').replace(/^-|-$/g, '')
+    return ascii || `doc-${index}`
+  }
+
   const uploadFiles = async (): Promise<string[]> => {
     if (uploadedFiles.length === 0) return []
 
@@ -85,9 +91,11 @@ export default function DirectPurchaseForm({
     setUploading(true)
 
     try {
-      for (const docFile of uploadedFiles) {
-        const fileExt = docFile.file.name.split('.').pop()
-        const fileName = `${userId}/${project.id}/${docFile.docType}/${Date.now()}-${Math.random().toString(36).substring(7)}.${fileExt}`
+      for (let i = 0; i < uploadedFiles.length; i++) {
+        const docFile = uploadedFiles[i]
+        const fileExt = docFile.file.name.split('.').pop() || 'bin'
+        const safeName = safePathSegment(docFile.docType, i)
+        const fileName = `${userId}/${project.id}/${safeName}/${Date.now()}-${Math.random().toString(36).substring(7)}.${fileExt}`
         const filePath = `purchase-documents/${fileName}`
 
         const { error: uploadError } = await supabase.storage
@@ -106,22 +114,23 @@ export default function DirectPurchaseForm({
           .from('documents')
           .getPublicUrl(filePath)
 
-        uploadedUrls.push(JSON.stringify({
+        const entry = JSON.stringify({
           docType: docFile.docType,
           fileName: docFile.file.name,
           fileSize: docFile.file.size,
           url: publicUrl,
           uploadedAt: new Date().toISOString(),
-        }))
+        })
+        uploadedUrls.push(entry)
       }
-
-      return uploadedUrls
     } catch (error: any) {
       toast.error(error.message || 'فشل رفع الملفات')
       throw error
     } finally {
       setUploading(false)
     }
+
+    return uploadedUrls
   }
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -232,19 +241,22 @@ export default function DirectPurchaseForm({
                       {docFiles.map((file) => (
                         <div
                           key={file.id}
-                          className="flex items-center gap-2 p-2 bg-gray-50 rounded-lg border border-gray-200"
+                          className="flex flex-col gap-0.5 p-2 bg-gray-50 rounded-lg border border-gray-200"
                         >
-                          <File className="w-4 h-4 text-gray-500 shrink-0" />
-                          <span className="text-sm text-gray-700 flex-1 truncate">{file.file.name}</span>
-                          <span className="text-xs text-gray-500">{(file.file.size / 1024).toFixed(1)} KB</span>
-                          <button
-                            type="button"
-                            onClick={() => removeFile(file.id)}
-                            className="p-1 hover:bg-red-100 rounded text-red-600 transition-colors"
-                            aria-label="حذف"
-                          >
-                            <X className="w-4 h-4" />
-                          </button>
+                          <div className="flex items-center gap-2">
+                            <File className="w-4 h-4 text-gray-500 shrink-0" />
+                            <span className="text-sm text-gray-700 flex-1 truncate">{file.file.name}</span>
+                            <span className="text-xs text-gray-500">{(file.file.size / 1024).toFixed(1)} KB</span>
+                            <button
+                              type="button"
+                              onClick={() => removeFile(file.id)}
+                              className="p-1 hover:bg-red-100 rounded text-red-600 transition-colors"
+                              aria-label="حذف"
+                            >
+                              <X className="w-4 h-4" />
+                            </button>
+                          </div>
+                          <span className="text-xs text-gray-500">نوع المستند: {file.docType}</span>
                         </div>
                       ))}
                     </div>

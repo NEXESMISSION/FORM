@@ -7,10 +7,10 @@ import toast from 'react-hot-toast'
 import { Save, X } from 'lucide-react'
 
 const TUNISIAN_GOVERNORATES = [
-  'Ariana', 'Béja', 'Ben Arous', 'Bizerte', 'Gabès', 'Gafsa',
-  'Jendouba', 'Kairouan', 'Kasserine', 'Kébili', 'Kef', 'Mahdia',
-  'Manouba', 'Médenine', 'Monastir', 'Nabeul', 'Sfax', 'Sidi Bouzid',
-  'Siliana', 'Sousse', 'Tataouine', 'Tozeur', 'Tunis', 'Zaghouan'
+  'أريانة', 'باجة', 'بن عروس', 'بنزرت', 'قابس', 'قفصة',
+  'جندوبة', 'القيروان', 'القصرين', 'قبلي', 'الكاف', 'المهدية',
+  'منوبة', 'مدنين', 'المنستير', 'نابل', 'صفاقس', 'سيدي بوزيد',
+  'سليانة', 'سوسة', 'تطاوين', 'توزر', 'تونس', 'زغوان'
 ]
 
 interface ProjectFormProps {
@@ -25,6 +25,7 @@ export default function ProjectForm({ project, onClose, onSuccess }: ProjectForm
   const [formData, setFormData] = useState({
     name: project?.name || '',
     description: project?.description || '',
+    thumbnail_url: project?.thumbnail_url || '',
     governorate: project?.governorate || '',
     district: project?.district || '',
     location_lat: project?.location_lat || '',
@@ -33,6 +34,7 @@ export default function ProjectForm({ project, onClose, onSuccess }: ProjectForm
     number_of_units: project?.number_of_units || '',
     expected_price: project?.expected_price || '',
     completion_percentage: project?.completion_percentage || 0,
+    start_date: project?.start_date || '',
     delivery_date: project?.delivery_date || '',
     status: project?.status || 'study',
     land_cost: project?.land_cost || '',
@@ -54,7 +56,7 @@ export default function ProjectForm({ project, onClose, onSuccess }: ProjectForm
     try {
       const { data: { user } } = await supabase.auth.getUser()
       if (!user) {
-        toast.error('Please login first')
+        toast.error('يرجى تسجيل الدخول أولاً')
         return
       }
 
@@ -70,6 +72,7 @@ export default function ProjectForm({ project, onClose, onSuccess }: ProjectForm
         project_duration_months: formData.project_duration_months ? parseInt(formData.project_duration_months) : null,
         expected_return_percentage: formData.expected_return_percentage ? parseFloat(formData.expected_return_percentage) : null,
         completion_percentage: parseInt(formData.completion_percentage.toString()) || 0,
+        start_date: formData.start_date || null,
         delivery_date: formData.delivery_date || null,
         created_by: user.id,
       }
@@ -80,40 +83,40 @@ export default function ProjectForm({ project, onClose, onSuccess }: ProjectForm
           .update(submitData)
           .eq('id', project.id)
         if (error) throw error
-        toast.success('Project updated successfully!')
+        toast.success('تم تحديث المشروع بنجاح!')
       } else {
         const { error } = await supabase
           .from('projects')
           .insert(submitData)
         if (error) throw error
-        toast.success('Project created successfully!')
+        toast.success('تم إنشاء المشروع بنجاح!')
       }
 
       onSuccess()
       onClose()
     } catch (error: any) {
-      toast.error(error.message || 'Failed to save project')
+      toast.error(error.message || 'فشل حفظ المشروع')
     } finally {
       setLoading(false)
     }
   }
 
   return (
-    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-      <div className="bg-white rounded-lg max-w-4xl w-full max-h-[90vh] overflow-y-auto">
-        <div className="sticky top-0 bg-white border-b border-gray-200 px-6 py-4 flex justify-between items-center">
-          <h2 className="text-2xl font-bold">
-            {project ? 'Edit Project' : 'Add New Project'}
+    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50" style={{ padding: 'max(1rem, env(safe-area-inset-top)) max(1rem, env(safe-area-inset-right)) max(1rem, env(safe-area-inset-bottom)) max(1rem, env(safe-area-inset-left))' }}>
+      <div className="bg-white rounded-3xl max-w-4xl w-full max-h-[90vh] overflow-y-auto shadow-2xl" style={{ margin: 'auto' }}>
+        <div className="sticky top-0 bg-white border-b border-gray-200 px-6 py-4 flex justify-between items-center z-10">
+          <h2 className="text-xl font-bold text-gray-900">
+            {project ? 'تعديل المشروع' : 'إضافة مشروع جديد'}
           </h2>
-          <button onClick={onClose} className="text-gray-500 hover:text-gray-700">
-            <X className="w-6 h-6" />
+          <button onClick={onClose} className="p-2 rounded-xl hover:bg-gray-100 transition-colors">
+            <X className="w-5 h-5 text-gray-500" />
           </button>
         </div>
 
         <form onSubmit={handleSubmit} className="p-6 space-y-6">
           <div className="grid md:grid-cols-2 gap-6">
             <div className="md:col-span-2">
-              <label className="form-label">Project Name *</label>
+              <label className="form-label">اسم المشروع *</label>
               <input
                 type="text"
                 value={formData.name}
@@ -124,7 +127,7 @@ export default function ProjectForm({ project, onClose, onSuccess }: ProjectForm
             </div>
 
             <div className="md:col-span-2">
-              <label className="form-label">Description</label>
+              <label className="form-label">الوصف</label>
               <textarea
                 value={formData.description}
                 onChange={(e) => updateField('description', e.target.value)}
@@ -133,15 +136,26 @@ export default function ProjectForm({ project, onClose, onSuccess }: ProjectForm
               />
             </div>
 
+            <div className="md:col-span-2">
+              <label className="form-label">رابط صورة المشروع (صورة مصغرة)</label>
+              <input
+                type="url"
+                value={formData.thumbnail_url}
+                onChange={(e) => updateField('thumbnail_url', e.target.value)}
+                className="form-input"
+                placeholder="https://... أو اترك فارغاً"
+              />
+            </div>
+
             <div>
-              <label className="form-label">Governorate *</label>
+              <label className="form-label">الولاية *</label>
               <select
                 value={formData.governorate}
                 onChange={(e) => updateField('governorate', e.target.value)}
                 className="form-input"
                 required
               >
-                <option value="">Select...</option>
+                <option value="">اختر...</option>
                 {TUNISIAN_GOVERNORATES.map(gov => (
                   <option key={gov} value={gov}>{gov}</option>
                 ))}
@@ -149,7 +163,7 @@ export default function ProjectForm({ project, onClose, onSuccess }: ProjectForm
             </div>
 
             <div>
-              <label className="form-label">District</label>
+              <label className="form-label">المعتمدية</label>
               <input
                 type="text"
                 value={formData.district}
@@ -159,7 +173,7 @@ export default function ProjectForm({ project, onClose, onSuccess }: ProjectForm
             </div>
 
             <div>
-              <label className="form-label">Latitude</label>
+              <label className="form-label">خط العرض</label>
               <input
                 type="number"
                 step="any"
@@ -171,7 +185,7 @@ export default function ProjectForm({ project, onClose, onSuccess }: ProjectForm
             </div>
 
             <div>
-              <label className="form-label">Longitude</label>
+              <label className="form-label">خط الطول</label>
               <input
                 type="number"
                 step="any"
@@ -183,20 +197,20 @@ export default function ProjectForm({ project, onClose, onSuccess }: ProjectForm
             </div>
 
             <div>
-              <label className="form-label">Housing Type *</label>
+              <label className="form-label">نوع السكن *</label>
               <select
                 value={formData.housing_type}
                 onChange={(e) => updateField('housing_type', e.target.value)}
                 className="form-input"
                 required
               >
-                <option value="apartment">Apartment</option>
-                <option value="individual">Individual Housing</option>
+                <option value="apartment">شقة</option>
+                <option value="individual">سكن فردي</option>
               </select>
             </div>
 
             <div>
-              <label className="form-label">Number of Units *</label>
+              <label className="form-label">عدد الوحدات *</label>
               <input
                 type="number"
                 min="1"
@@ -208,7 +222,7 @@ export default function ProjectForm({ project, onClose, onSuccess }: ProjectForm
             </div>
 
             <div>
-              <label className="form-label">Expected Price (TND)</label>
+              <label className="form-label">السعر المتوقع (د.ت)</label>
               <input
                 type="number"
                 min="0"
@@ -220,23 +234,23 @@ export default function ProjectForm({ project, onClose, onSuccess }: ProjectForm
             </div>
 
             <div>
-              <label className="form-label">Status *</label>
+              <label className="form-label">الحالة *</label>
               <select
                 value={formData.status}
                 onChange={(e) => updateField('status', e.target.value)}
                 className="form-input"
                 required
               >
-                <option value="study">Under Study</option>
-                <option value="construction_90">Construction (90 days)</option>
-                <option value="construction_180">Construction (180 days)</option>
-                <option value="construction_365">Construction (1 year)</option>
-                <option value="ready">Ready for Sale</option>
+                <option value="study">قيد الدراسة</option>
+                <option value="construction_90">بناء (90 يوم)</option>
+                <option value="construction_180">بناء (180 يوم)</option>
+                <option value="construction_365">بناء (سنة)</option>
+                <option value="ready">جاهز للبيع</option>
               </select>
             </div>
 
             <div>
-              <label className="form-label">Completion Percentage</label>
+              <label className="form-label">نسبة الإنجاز</label>
               <input
                 type="number"
                 min="0"
@@ -248,17 +262,27 @@ export default function ProjectForm({ project, onClose, onSuccess }: ProjectForm
             </div>
 
             <div>
-              <label className="form-label">Delivery Date</label>
+              <label className="form-label">تاريخ البدء</label>
+              <input
+                type="date"
+                value={formData.start_date}
+                onChange={(e) => updateField('start_date', e.target.value)}
+                className="form-input"
+              />
+            </div>
+            <div>
+              <label className="form-label">تاريخ الانتهاء المتوقع</label>
               <input
                 type="date"
                 value={formData.delivery_date}
                 onChange={(e) => updateField('delivery_date', e.target.value)}
                 className="form-input"
               />
+              <p className="text-xs text-gray-500 mt-1">يمكن تمديده لاحقاً من بطاقة المشروع</p>
             </div>
 
             <div>
-              <label className="form-label">Land Cost (TND)</label>
+              <label className="form-label">تكلفة الأرض (د.ت)</label>
               <input
                 type="number"
                 min="0"
@@ -270,7 +294,7 @@ export default function ProjectForm({ project, onClose, onSuccess }: ProjectForm
             </div>
 
             <div>
-              <label className="form-label">Construction Cost (TND)</label>
+              <label className="form-label">تكلفة البناء (د.ت)</label>
               <input
                 type="number"
                 min="0"
@@ -282,7 +306,7 @@ export default function ProjectForm({ project, onClose, onSuccess }: ProjectForm
             </div>
 
             <div>
-              <label className="form-label">Total Cost (TND)</label>
+              <label className="form-label">التكلفة الإجمالية (د.ت)</label>
               <input
                 type="number"
                 min="0"
@@ -294,7 +318,7 @@ export default function ProjectForm({ project, onClose, onSuccess }: ProjectForm
             </div>
 
             <div>
-              <label className="form-label">Project Duration (months)</label>
+              <label className="form-label">مدة المشروع (أشهر)</label>
               <input
                 type="number"
                 min="0"
@@ -305,7 +329,7 @@ export default function ProjectForm({ project, onClose, onSuccess }: ProjectForm
             </div>
 
             <div>
-              <label className="form-label">Expected Return (%)</label>
+              <label className="form-label">العائد المتوقع (%)</label>
               <input
                 type="number"
                 min="0"
@@ -317,33 +341,33 @@ export default function ProjectForm({ project, onClose, onSuccess }: ProjectForm
             </div>
 
             <div>
-              <label className="form-label">Risk Level</label>
+              <label className="form-label">مستوى المخاطر</label>
               <select
                 value={formData.risk_level}
                 onChange={(e) => updateField('risk_level', e.target.value)}
                 className="form-input"
               >
-                <option value="low">Low</option>
-                <option value="medium">Medium</option>
-                <option value="high">High</option>
+                <option value="low">منخفض</option>
+                <option value="medium">متوسط</option>
+                <option value="high">عالي</option>
               </select>
             </div>
           </div>
 
-          <div className="flex justify-end space-x-4 pt-4 border-t border-gray-200">
+          <div className="flex justify-end gap-3 pt-4 border-t border-gray-200">
             <button
               type="button"
               onClick={onClose}
               className="btn-secondary"
             >
-              Cancel
+              إلغاء
             </button>
             <button
               type="submit"
               disabled={loading}
-              className="btn-primary"
+              className="btn-primary flex items-center gap-2"
             >
-              {loading ? <span className="spinner"></span> : <><Save className="w-4 h-4 mr-2 inline" />Save Project</>}
+              {loading ? <span className="spinner"></span> : <><Save className="w-4 h-4" />حفظ المشروع</>}
             </button>
           </div>
         </form>

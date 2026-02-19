@@ -213,49 +213,65 @@ export default function RegisterPage() {
       // Add governorate (will be handled gracefully if column doesn't exist)
       if (governorate?.trim()) profileToInsert.governorate = governorate.trim()
 
+      // Upsert so we don't fail if a trigger already created the profile (same id); avoids false "phone used" after signup
       const { error: profileError, data: createdProfile } = await supabase
         .from('profiles')
-        .insert(profileToInsert)
+        .upsert(profileToInsert, { onConflict: 'id' })
         .select()
         .single()
 
       if (profileError) {
-        console.error('Profile creation error:', profileError)
-        const httpStatus = (profileError as any).status
+        console.error('Profile upsert error:', profileError)
         const errorMsg = (profileError.message || '').toLowerCase()
         const errorCode = profileError.code
+        const statusCode = (profileError as any).status || (profileError as any).statusCode || errorCode
         
-        // Check for duplicate phone
-        const isDuplicatePhone = errorCode === '23505' || 
-                                 httpStatus === 409 ||
-                                 errorMsg.includes('phone_number') ||
-                                 errorMsg.includes('unique constraint') ||
-                                 errorMsg.includes('duplicate')
-        
-        // Check for column doesn't exist error (42883 = undefined_column)
-        const isColumnError = errorCode === '42703' || errorCode === '42883' || errorMsg.includes('column') || errorMsg.includes('does not exist')
-        
-        if (isDuplicatePhone) {
-          await supabase.auth.signOut()
-          throw new Error('رقم الهاتف مسجّل مسبقاً. استخدم رقماً آخر أو سجّل الدخول.')
+        // Handle 409 Conflict - profile might already exist, try to fetch it instead
+        if (statusCode === 409 || statusCode === '409' || errorCode === '23505' || errorMsg.includes('conflict')) {
+          // Check if it's a phone number conflict (another user) or just ID conflict (same user)
+          const isDuplicatePhone = errorMsg.includes('phone_number') || errorMsg.includes('profiles_phone_number') || errorMsg.includes('unique constraint') && errorMsg.includes('phone')
+          
+          if (isDuplicatePhone) {
+            // Another user has this phone number
+            await supabase.auth.signOut()
+            throw new Error('رقم الهاتف مسجّل مسبقاً. استخدم رقماً آخر أو سجّل الدخول.')
+          } else {
+            // Same user, profile might already exist - try to fetch it
+            const { data: existingProfile, error: fetchError } = await supabase
+              .from('profiles')
+              .select('*')
+              .eq('id', authData.user.id)
+              .single()
+            
+            if (existingProfile && !fetchError) {
+              // Profile exists, continue with registration
+              toast.success('تم إنشاء الحساب بنجاح!')
+              if (!authData.session) {
+                router.push('/auth/login?message=confirm')
+              } else {
+                router.push('/dashboard/applicant?form=1')
+              }
+              setLoading(false)
+              return
+            }
+          }
         }
         
+        const isColumnError = errorCode === '42703' || errorCode === '42883' || errorMsg.includes('column') || errorMsg.includes('does not exist')
+
         if (isColumnError) {
-          // Try without governorate if column doesn't exist
           const profileWithoutGov = { ...profileToInsert }
           delete profileWithoutGov.governorate
           const { error: retryError, data: retryProfile } = await supabase
             .from('profiles')
-            .insert(profileWithoutGov)
+            .upsert(profileWithoutGov, { onConflict: 'id' })
             .select()
             .single()
-          
+
           if (retryError) {
             await supabase.auth.signOut()
             throw new Error('خطأ في قاعدة البيانات. يرجى تنفيذ ملف UPDATE_DATABASE_FULL.sql في Supabase.')
           }
-          
-          // Success without governorate
           if (retryProfile) {
             toast.success('تم إنشاء الحساب (بدون الولاية - يرجى تحديث قاعدة البيانات)')
             if (!authData.session) {
@@ -263,10 +279,11 @@ export default function RegisterPage() {
             } else {
               router.push('/dashboard/applicant?form=1')
             }
+            setLoading(false)
             return
           }
         }
-        
+
         await supabase.auth.signOut()
         throw new Error(`فشل إنشاء الملف: ${profileError.message || 'خطأ غير معروف'}. يرجى التحقق من قاعدة البيانات.`)
       }
@@ -301,7 +318,7 @@ export default function RegisterPage() {
             <ArrowRight className="w-5 h-5" />
             <span className="text-sm font-medium">الرئيسية</span>
           </Link>
-          <Image src="/logo.png" alt="DOMOBAT" width={112} height={112} className="rounded-2xl" style={{ width: 'auto', height: 'auto' }} />
+          <Image src="/logo.png" alt="DOMOBAT" width={112} height={112} className="rounded-2xl" style={{ width: 'auto', height: 'auto' }} priority />
           <div className="w-20"></div>
         </div>
       </nav>

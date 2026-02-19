@@ -24,13 +24,33 @@ const getStatusLabel = (status: string) => {
 
 const getStatusColor = (status: string) => {
   const colors: Record<string, string> = {
-    study: 'bg-blue-100 text-blue-800',
+    study: 'bg-primary-100 text-primary-800',
     construction_90: 'bg-amber-100 text-amber-800',
     construction_180: 'bg-orange-100 text-orange-800',
     construction_365: 'bg-purple-100 text-purple-800',
     ready: 'bg-primary-100 text-primary-800',
   }
   return colors[status] || 'bg-gray-100 text-gray-800'
+}
+
+function getProjectTiming(project: any) {
+  const today = new Date()
+  today.setHours(0, 0, 0, 0)
+  const start = project.start_date ? new Date(project.start_date) : null
+  const end = project.delivery_date ? new Date(project.delivery_date) : null
+  if (!end) return null
+  end.setHours(0, 0, 0, 0)
+  if (start) start.setHours(0, 0, 0, 0)
+  const todayTime = today.getTime()
+  const endTime = end.getTime()
+  const startTime = start ? start.getTime() : null
+  if (todayTime > endTime) return { label: 'منتهي', isFinished: true }
+  if (startTime != null && todayTime < startTime) {
+    const days = Math.ceil((startTime - todayTime) / (24 * 60 * 60 * 1000))
+    return { label: `يبدأ بعد ${days} يوم`, isFinished: false }
+  }
+  const days = Math.ceil((endTime - todayTime) / (24 * 60 * 60 * 1000))
+  return { label: `متبقي ${days} يوم`, isFinished: false }
 }
 
 export default function ProjectDetailPage() {
@@ -91,17 +111,42 @@ export default function ProjectDetailPage() {
       </header>
 
       <div className="max-w-[28rem] mx-auto px-4 py-6 pb-32">
-        {/* Hero-style card (like Total balance) */}
-        <div className="card-gradient mb-6">
-          <h1 className="text-xl font-bold text-white mb-2">{project.name}</h1>
-          <span className="inline-block px-3 py-1 rounded-full text-sm font-medium bg-white/20 text-white">
-            {getStatusLabel(project.status)}
-          </span>
-          {project.expected_price && (
-            <p className="text-white/90 text-lg font-semibold mt-3">
-              {Number(project.expected_price).toLocaleString()} د.ت
-            </p>
+        {/* Hero with thumbnail or gradient */}
+        <div className="rounded-3xl overflow-hidden mb-6 bg-primary-800 min-h-[12rem] relative">
+          {project.thumbnail_url ? (
+            <div className="absolute inset-0">
+              <Image
+                src={project.thumbnail_url}
+                alt=""
+                fill
+                className="object-cover"
+                sizes="(max-width: 28rem) 100vw, 28rem"
+                priority
+              />
+              <div className="absolute inset-0 bg-gradient-to-t from-black/70 via-black/30 to-transparent" />
+            </div>
+          ) : (
+            <div className="absolute inset-0 bg-gradient-to-br from-primary-900 via-primary-800 to-primary-900" />
           )}
+          <div className="relative z-10 p-6 flex flex-col justify-end min-h-[12rem]">
+            <h1 className="text-xl font-bold text-white mb-2">{project.name}</h1>
+            <div className="flex flex-wrap items-center gap-2 mb-2">
+              <span className="inline-block px-3 py-1 rounded-full text-sm font-medium bg-white/20 text-white w-fit">
+                {getProjectTiming(project)?.isFinished ? 'منتهي' : getStatusLabel(project.status)}
+              </span>
+              {getProjectTiming(project)?.label && (
+                <span className="inline-flex items-center gap-1 px-3 py-1 rounded-full text-sm font-medium bg-white/15 text-white">
+                  <Calendar className="w-4 h-4" />
+                  {getProjectTiming(project)!.label}
+                </span>
+              )}
+            </div>
+            {project.expected_price && (
+              <p className="text-white/90 text-lg font-semibold mt-3">
+                {Number(project.expected_price).toLocaleString()} د.ت
+              </p>
+            )}
+          </div>
         </div>
 
         <div className="card rounded-3xl p-5 mb-6">
@@ -186,10 +231,10 @@ export default function ProjectDetailPage() {
         </div>
       </div>
 
-      {/* Modal طلب شراء */}
+      {/* Modal طلب شراء — centred for PWA */}
       {showPurchaseModal && project && user && (
-        <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-0 sm:p-4 bg-black/60 backdrop-blur-sm animate-fade-in" onClick={() => setShowPurchaseModal(false)}>
-          <div className="bg-white w-full max-w-lg max-h-[85vh] overflow-y-auto rounded-t-3xl sm:rounded-3xl shadow-2xl animate-slide-up pb-28" onClick={(e) => e.stopPropagation()}>
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm animate-fade-in" style={{ padding: 'max(1rem, env(safe-area-inset-top)) max(1rem, env(safe-area-inset-right)) max(1rem, env(safe-area-inset-bottom)) max(1rem, env(safe-area-inset-left))' }}>
+          <div className="bg-white w-full max-w-lg max-h-[90vh] overflow-y-auto rounded-3xl shadow-2xl animate-slide-up pb-28" style={{ margin: 'auto' }}>
             <div className="sticky top-0 bg-white border-b border-gray-100 px-6 py-4 flex justify-between items-center z-10">
               <div>
                 <h2 className="text-xl font-bold text-gray-900">طلب شراء</h2>

@@ -9,41 +9,43 @@ module.exports = {
     extend: {
       colors: {
         primary: {
-          50: '#eff6ff',
-          100: '#dbeafe',
-          200: '#bfdbfe',
-          300: '#93c5fd',
-          400: '#60a5fa',
-          500: '#3b82f6',
-          600: '#2563eb',
-          700: '#1d4ed8',
-          800: '#1e40af',
-          900: '#1e3a8a',
+          50: '#f9fafb',   // Very light gray
+          100: '#f3f4f6',  // Light gray
+          200: '#e5e7eb',  // Pale gray
+          300: '#d1d5db',  // Soft gray
+          400: '#9ca3af',  // Medium gray
+          500: '#6b7280',  // Gray
+          600: '#4b5563',  // Dark gray (main)
+          700: '#374151',  // Deeper gray
+          800: '#1f2937',  // Dark gray/black
+          900: '#111827',  // Deepest black
         },
         accent: {
-          50: '#fffbeb',
-          100: '#fef3c7',
-          200: '#fde68a',
-          300: '#fcd34d',
-          400: '#fbbf24',
-          500: '#f59e0b',
-          600: '#d97706',
-          700: '#b45309',
-          800: '#92400e',
-          900: '#78350f',
+          50: '#fafafa',
+          100: '#f4f4f5',
+          200: '#e4e4e7',
+          300: '#d4d4d8',
+          400: '#a1a1aa',
+          500: '#71717a',
+          600: '#52525b',
+          700: '#3f3f46',
+          800: '#27272a',
+          900: '#18181b',
         },
         surface: {
-          DEFAULT: '#f8fafc',
+          DEFAULT: '#fafafa',
           card: '#ffffff',
+          dark: '#111827',
         },
       },
       borderRadius: {
         '4xl': '2rem',
       },
       boxShadow: {
-        'soft': '0 4px 20px -4px rgba(0,0,0,.06), 0 2px 8px -2px rgba(0,0,0,.03)',
-        'card': '0 1px 3px 0 rgba(0,0,0,.04), 0 1px 2px -1px rgba(0,0,0,.02)',
-        'glow': '0 0 0 1px rgba(37, 99, 235, 0.1), 0 4px 14px -2px rgba(37, 99, 235, 0.15)',
+        'soft': '0 4px 20px -4px rgba(0,0,0,.08), 0 2px 8px -2px rgba(0,0,0,.04)',
+        'card': '0 1px 3px 0 rgba(0,0,0,.06), 0 1px 2px -1px rgba(0,0,0,.03)',
+        'glow': '0 0 0 1px rgba(75, 85, 99, 0.15), 0 4px 14px -2px rgba(31, 41, 55, 0.2)',
+        'gold': '0 4px 20px -4px rgba(31, 41, 55, 0.25), 0 2px 8px -2px rgba(17, 24, 39, 0.15)',
       },
       animation: {
         'fade-in': 'fadeIn 0.3s ease-out',

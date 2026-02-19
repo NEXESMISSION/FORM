@@ -17,10 +17,19 @@ const PURCHASE_STATUS_LABELS: Record<string, string> = {
 
 const PURCHASE_STATUS_COLORS: Record<string, string> = {
   pending: 'bg-amber-100 text-amber-800 border-amber-200',
-  in_progress: 'bg-blue-100 text-blue-800 border-blue-200',
+  in_progress: 'bg-primary-100 text-primary-800 border-primary-200',
   approved: 'bg-green-100 text-green-800 border-green-200',
   rejected: 'bg-red-100 text-red-800 border-red-200',
 }
+
+const PROGRESS_STAGE_LABELS: Record<string, string> = {
+  study: 'دراسة المشروع',
+  design: 'التصميم',
+  construction: 'البناء',
+  finishing: 'التشطيب',
+  ready: 'جاهز للتسليم',
+}
+const PROGRESS_STAGES_ORDER = ['study', 'design', 'construction', 'finishing', 'ready'] as const
 
 export default function DirectPurchaseDetailPage() {
   const router = useRouter()
@@ -93,9 +102,77 @@ export default function DirectPurchaseDetailPage() {
 
         {/* ملاحظة من الإدارة إن وجدت */}
         {purchase.admin_notes && (
-          <div className="rounded-2xl bg-blue-50 border border-blue-200 p-4 mb-6">
-            <p className="font-semibold text-blue-900 text-sm mb-2">ملاحظة من الإدارة</p>
-            <p className="text-sm text-blue-800 whitespace-pre-wrap">{purchase.admin_notes}</p>
+          <div className="rounded-2xl bg-primary-50 border border-primary-200 p-4 mb-6">
+            <p className="font-semibold text-primary-900 text-sm mb-2">ملاحظة من الإدارة</p>
+            <p className="text-sm text-primary-800 whitespace-pre-wrap">{purchase.admin_notes}</p>
+          </div>
+        )}
+
+        {/* تتبع التقدم — للموافَق عليهم أو قيد المتابعة */}
+        {(purchase.status === 'approved' || purchase.status === 'in_progress') && (
+          <div className="card mb-6">
+            <h3 className="text-sm font-semibold text-gray-900 mb-1">تتبع تقدم طلبك</h3>
+            <p className="text-xs text-gray-500 mb-4">تحديثات من الإدارة تظهر هنا فور رفعها.</p>
+
+            <div className="space-y-2 mb-4">
+              {PROGRESS_STAGES_ORDER.map((stageKey, idx) => {
+                const currentStageIndex = purchase.progress_stage ? PROGRESS_STAGES_ORDER.indexOf(purchase.progress_stage as typeof PROGRESS_STAGES_ORDER[number]) : -1
+                const stepIndex = PROGRESS_STAGES_ORDER.indexOf(stageKey)
+                const isCompleted = currentStageIndex >= 0 && stepIndex < currentStageIndex
+                const isCurrent = purchase.progress_stage === stageKey
+                return (
+                  <div
+                    key={stageKey}
+                    className={`flex items-center gap-3 py-2.5 px-3 rounded-xl border-2 transition-colors ${
+                      isCurrent ? 'border-primary-400 bg-primary-50' : isCompleted ? 'border-green-200 bg-green-50/80' : 'border-gray-100 bg-gray-50/50'
+                    }`}
+                  >
+                    <span className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-sm font-bold ${
+                      isCurrent ? 'bg-primary-600 text-white' : isCompleted ? 'bg-green-600 text-white' : 'bg-gray-200 text-gray-500'
+                    }`}>
+                      {isCompleted ? '✓' : idx + 1}
+                    </span>
+                    <span className={`text-sm font-medium ${isCurrent ? 'text-primary-900' : isCompleted ? 'text-green-800' : 'text-gray-600'}`}>
+                      {PROGRESS_STAGE_LABELS[stageKey] || stageKey}
+                    </span>
+                    {isCurrent && <span className="text-xs text-primary-600 font-medium mr-auto">المرحلة الحالية</span>}
+                  </div>
+                )
+              })}
+            </div>
+
+            <div className="mb-3">
+              <div className="flex justify-between items-center mb-2">
+                <div className="flex flex-col">
+                  <p className="text-xs text-gray-500">نسبة الإنجاز</p>
+                  {purchase.progress_stage && (
+                    <p className="text-xs font-medium text-primary-700 mt-0.5">
+                      {PROGRESS_STAGE_LABELS[purchase.progress_stage] || purchase.progress_stage}
+                    </p>
+                  )}
+                </div>
+                <p className="text-sm font-bold text-primary-600">{purchase.progress_percentage ?? 0}%</p>
+              </div>
+              <div className="w-full bg-gray-200 rounded-full h-3 overflow-hidden">
+                <div
+                  className="bg-primary-500 h-3 rounded-full transition-all duration-500"
+                  style={{ width: `${Math.min(100, Math.max(0, purchase.progress_percentage ?? 0))}%` }}
+                />
+              </div>
+            </div>
+
+            {purchase.progress_notes && (
+              <div className="pt-3 border-t border-gray-100">
+                <p className="text-xs font-medium text-gray-600 mb-1">آخر تحديث من الإدارة</p>
+                <p className="text-sm text-gray-800 whitespace-pre-wrap">{purchase.progress_notes}</p>
+              </div>
+            )}
+
+            {(purchase.progress_updated_at || (purchase.progress_stage && purchase.updated_at)) && (
+              <p className="text-xs text-gray-400 mt-3">
+                آخر تحديث: {new Date(purchase.progress_updated_at || purchase.updated_at).toLocaleDateString('ar-TN', { dateStyle: 'medium' })} — {new Date(purchase.progress_updated_at || purchase.updated_at).toLocaleTimeString('ar-TN', { hour: '2-digit', minute: '2-digit' })}
+              </p>
+            )}
           </div>
         )}
 
@@ -105,15 +182,32 @@ export default function DirectPurchaseDetailPage() {
           {docs.length === 0 ? (
             <p className="text-sm text-gray-500">لا توجد مستندات مرفوعة.</p>
           ) : (
-            <ul className="space-y-2">
+            <ul className="space-y-3">
               {docs.map((item: any, i: number) => {
                 const parsed = typeof item === 'string' ? (() => { try { return JSON.parse(item) } catch { return { url: item, fileName: `مستند ${i + 1}` } } })() : item
                 const url = parsed?.url || parsed
                 const name = parsed?.fileName || parsed?.docType || `مستند ${i + 1}`
+                const status = parsed?.status || 'pending_review'
+                const isRejected = status === 'rejected'
                 return (
-                  <li key={i} className="flex items-center justify-between gap-2 py-2 border-b border-gray-100 last:border-0">
-                    <span className="text-sm text-gray-700 truncate">{name}</span>
-                    {url && <a href={url} target="_blank" rel="noopener noreferrer" className="text-primary-600 text-sm flex items-center gap-1 shrink-0"><ExternalLink className="w-4 h-4" /> فتح</a>}
+                  <li key={i} className={`rounded-xl border p-3 ${isRejected ? 'border-red-200 bg-red-50/80' : 'border-gray-100 bg-gray-50/50'}`}>
+                    <div className="flex items-center justify-between gap-2 flex-wrap">
+                      <div className="min-w-0 flex-1">
+                        <span className="text-sm font-medium text-gray-900 truncate block">{name}</span>
+                        {parsed?.docType && parsed.docType !== name && <span className="text-xs text-gray-500">{parsed.docType}</span>}
+                        {isRejected && parsed?.rejectionReason && (
+                          <p className="text-xs text-red-600 mt-1">سبب الرفض: {parsed.rejectionReason}</p>
+                        )}
+                        <span className={`inline-block mt-1.5 px-2 py-0.5 rounded text-xs ${status === 'accepted' ? 'bg-green-100 text-green-800' : isRejected ? 'bg-red-100 text-red-800' : 'bg-gray-200 text-gray-700'}`}>
+                          {status === 'accepted' ? 'مقبول' : isRejected ? 'مرفوض — يرجى تحديث المستند' : 'قيد المراجعة'}
+                        </span>
+                      </div>
+                      {url && (
+                        <a href={url} target="_blank" rel="noopener noreferrer" className="text-primary-600 text-sm flex items-center gap-1 shrink-0">
+                          <ExternalLink className="w-4 h-4" /> فتح
+                        </a>
+                      )}
+                    </div>
                   </li>
                 )
               })}

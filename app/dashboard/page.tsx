@@ -62,7 +62,19 @@ export default function DashboardPage() {
         return
       }
 
-      // No profile row for this user — try to create one (phone_number is NOT NULL in DB)
+      // No profile row for this user — maybe created by trigger or 409 on insert. Fetch by id first.
+      const { data: existingById } = await supabase
+        .from('profiles')
+        .select('*')
+        .eq('id', user.id)
+        .maybeSingle()
+
+      if (existingById) {
+        setProfile(existingById)
+        return
+      }
+
+      // Really no profile: try to create one (phone_number is NOT NULL in DB)
       const phone = user.user_metadata?.phone_number || user.phone || ''
       const profileToInsert = {
         id: user.id,
@@ -73,7 +85,7 @@ export default function DashboardPage() {
 
       const { data: newProfile, error: createError } = await supabase
         .from('profiles')
-        .insert(profileToInsert)
+        .upsert(profileToInsert, { onConflict: 'id' })
         .select()
         .maybeSingle()
 
@@ -82,33 +94,8 @@ export default function DashboardPage() {
         return
       }
 
-      if (createError?.code === '23505') {
-        const msg = (createError.message || '').toLowerCase()
-        const isDuplicatePhone = msg.includes('phone_number') || msg.includes('profiles_phone_number_key')
-
-        if (isDuplicatePhone) {
-          toast.error('رقم الهاتف هذا مرتبط بحساب آخر. سجّل الدخول بالحساب المرتبط بهذا الرقم أو تواصل مع الدعم.')
-          // Try unique placeholder so this session can still use the app (one profile per auth user)
-          const placeholderPhone = `+216000000000-${user.id}`
-          const { data: fallbackProfile, error: fallbackError } = await supabase
-            .from('profiles')
-            .insert({
-              id: user.id,
-              phone_number: placeholderPhone,
-              email: user.email || '',
-              role: (user.user_metadata?.role as any) || 'applicant',
-            })
-            .select()
-            .maybeSingle()
-
-          if (!fallbackError && fallbackProfile) {
-            setProfile(fallbackProfile)
-            toast.success('تم إنشاء ملف شخصي مؤقت لهذه الجلسة. يفضّل توحيد الحسابات مع الدعم.')
-            return
-          }
-        }
-
-        // Duplicate primary key: profile might have been created by trigger — fetch again
+      if (createError?.code === '23505' || (createError as any)?.status === 409) {
+        // Conflict: profile might exist (e.g. trigger). Fetch by id again.
         const { data: existingProfile } = await supabase
           .from('profiles')
           .select('*')
@@ -118,6 +105,30 @@ export default function DashboardPage() {
         if (existingProfile) {
           setProfile(existingProfile)
           return
+        }
+
+        const msg = (createError.message || '').toLowerCase()
+        const isDuplicatePhone = msg.includes('phone_number') || msg.includes('profiles_phone_number')
+
+        if (isDuplicatePhone) {
+          toast.error('رقم الهاتف هذا مرتبط بحساب آخر. سجّل الدخول بالحساب المرتبط بهذا الرقم أو تواصل مع الدعم.')
+          const placeholderPhone = `+216000000000-${user.id}`
+          const { data: fallbackProfile, error: fallbackError } = await supabase
+            .from('profiles')
+            .upsert({
+              id: user.id,
+              phone_number: placeholderPhone,
+              email: user.email || '',
+              role: (user.user_metadata?.role as any) || 'applicant',
+            }, { onConflict: 'id' })
+            .select()
+            .maybeSingle()
+
+          if (!fallbackError && fallbackProfile) {
+            setProfile(fallbackProfile)
+            toast.success('تم إنشاء ملف شخصي مؤقت. يفضّل توحيد الحسابات مع الدعم.')
+            return
+          }
         }
       }
 

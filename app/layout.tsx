@@ -1,6 +1,9 @@
 import type { Metadata } from 'next'
+import { Suspense } from 'react'
 import './globals.css'
 import { Toaster } from 'react-hot-toast'
+import ClientOnlyLayoutExtras from '@/components/ClientOnlyLayoutExtras'
+import ChatWidget from '@/components/ChatWidget'
 
 export const metadata: Metadata = {
   title: 'DOMOBAT — برنامج السكن الاقتصادي السريع',
@@ -35,7 +38,7 @@ export const metadata: Metadata = {
     description: 'استمارة رقمية لدراسة الوضعية السكنية والمالية واقتراح الحل السكني الأنسب',
     images: ['/logo.png'],
   },
-  themeColor: '#2563eb',
+  themeColor: '#1f2937',
   viewport: {
     width: 'device-width',
     initialScale: 1,
@@ -57,7 +60,11 @@ export default function RootLayout({
         <link rel="icon" href="/logo.png" type="image/png" />
       </head>
       <body className="antialiased">
+        <Suspense fallback={null}>
+          <ClientOnlyLayoutExtras />
+        </Suspense>
         {children}
+        <ChatWidget />
         <Toaster 
           position="top-center" 
           toastOptions={{

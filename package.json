@@ -3,15 +3,18 @@
   "version": "1.0.0",
   "private": true,
   "scripts": {
-    "dev": "next dev",
-    "build": "next build",
+    "dev": "next dev --turbo",
+    "build": "SKIP_ENV_VALIDATION=true next build",
+    "build:fast": "SKIP_ENV_VALIDATION=true next build --no-lint",
     "start": "next start",
-    "lint": "next lint"
+    "lint": "next lint",
+    "type-check": "tsc --noEmit"
   },
   "dependencies": {
     "@hookform/resolvers": "^3.3.2",
     "@supabase/supabase-js": "^2.38.0",
     "date-fns": "^2.30.0",
+    "isomorphic-dompurify": "^2.36.0",
     "lucide-react": "^0.294.0",
     "next": "^14.0.0",
     "react": "^18.2.0",

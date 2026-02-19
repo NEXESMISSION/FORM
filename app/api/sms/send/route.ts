@@ -1,21 +1,28 @@
 import { NextRequest, NextResponse } from 'next/server'
+import { smsRateLimit } from '@/lib/security/rateLimiting'
+import { sanitizePhone } from '@/lib/security/sanitization'
+import { requireAuth } from '@/lib/security/authentication'
 
-// Infobip API configuration
-const INFOBIP_BASE_URL = process.env.INFOBIP_BASE_URL || '8vgner.api.infobip.com'
-const INFOBIP_API_KEY = process.env.INFOBIP_API_KEY || 'f344ab517ff3a9ddf768ab684fd93534-4d1ff8aa-80af-44ab-bba7-bc9ba03dba8b'
+// Infobip API configuration - MUST be in environment variables
+const INFOBIP_BASE_URL = process.env.INFOBIP_BASE_URL
+const INFOBIP_API_KEY = process.env.INFOBIP_API_KEY
+
+if (!INFOBIP_BASE_URL || !INFOBIP_API_KEY) {
+  console.error('Missing INFOBIP configuration in environment variables')
+}
 
 // Store verification codes temporarily (in production, use Redis or database)
 const verificationCodes = new Map<string, { code: string; expiresAt: number }>()
 
-// Clean up expired codes every 5 minutes
-setInterval(() => {
+// Clean up expired codes (called on each request instead of setInterval for serverless compatibility)
+function cleanupExpiredCodes() {
   const now = Date.now()
   Array.from(verificationCodes.entries()).forEach(([phone, data]) => {
     if (data.expiresAt < now) {
       verificationCodes.delete(phone)
     }
   })
-}, 5 * 60 * 1000)
+}
 
 // Helper function to format Tunisian phone numbers
 function formatTunisianPhone(phone: string): string {
@@ -38,23 +45,52 @@ function formatTunisianPhone(phone: string): string {
   return cleaned
 }
 
-export async function POST(request: NextRequest) {
-  try {
-    const { phone: rawPhone } = await request.json()
+export const POST = requireAuth(async (request: NextRequest, user: any) => {
+  // Check rate limit
+  const rateLimitResult = await smsRateLimit(request)
+  if (!rateLimitResult.allowed) {
+    return NextResponse.json(
+      { 
+        error: 'Too many requests. Please try again later.',
+        retryAfter: rateLimitResult.retryAfter 
+      },
+      { 
+        status: 429,
+        headers: {
+          'Retry-After': String(rateLimitResult.retryAfter || 900),
+          'X-RateLimit-Limit': '3',
+          'X-RateLimit-Remaining': String(rateLimitResult.remaining),
+          'X-RateLimit-Reset': String(rateLimitResult.resetTime),
+        }
+      }
+    )
+  }
 
-    if (!rawPhone) {
+  // Check environment variables
+  if (!INFOBIP_BASE_URL || !INFOBIP_API_KEY) {
+    return NextResponse.json(
+      { error: 'SMS service not configured' },
+      { status: 503 }
+    )
+  }
+
+  // Clean up expired codes on each request
+  cleanupExpiredCodes()
+  
+  try {
+    const body = await request.json()
+    const { phone: rawPhone } = body
+
+    if (!rawPhone || typeof rawPhone !== 'string') {
       return NextResponse.json(
         { error: 'Phone number is required' },
         { status: 400 }
       )
     }
 
-    // Format phone number
-    const phone = formatTunisianPhone(rawPhone)
-
-    // Validate phone number format (Tunisian format: +216XXXXXXXXX)
-    const phoneRegex = /^\+216[0-9]{8}$/
-    if (!phoneRegex.test(phone)) {
+    // Sanitize and validate phone number
+    const phone = sanitizePhone(rawPhone)
+    if (!phone) {
       return NextResponse.json(
         { error: 'Invalid phone number format. Use +216XXXXXXXXX or 0XXXXXXXX' },
         { status: 400 }
@@ -159,13 +195,25 @@ export async function POST(request: NextRequest) {
 }
 
 // Verify code endpoint
-export async function PUT(request: NextRequest) {
+export const PUT = requireAuth(async (request: NextRequest, user: any) => {
   try {
-    const { phone, code } = await request.json()
+    const body = await request.json()
+    const { phone: rawPhone, code: rawCode } = body
 
-    if (!phone || !code) {
+    if (!rawPhone || typeof rawPhone !== 'string' || !rawCode || typeof rawCode !== 'string') {
       return NextResponse.json(
         { error: 'Phone number and code are required' },
+        { status: 400 }
+      )
+    }
+
+    // Sanitize inputs
+    const phone = sanitizePhone(rawPhone)
+    const code = rawCode.replace(/\D/g, '') // Only digits
+
+    if (!phone || code.length !== 6) {
+      return NextResponse.json(
+        { error: 'Invalid phone number or code format' },
         { status: 400 }
       )
     }
@@ -204,8 +252,8 @@ export async function PUT(request: NextRequest) {
   } catch (error: any) {
     console.error('Code verification error:', error)
     return NextResponse.json(
-      { error: error.message || 'Failed to verify code' },
+      { error: 'Failed to verify code' },
       { status: 500 }
     )
   }
-}
+})

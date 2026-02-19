@@ -1,5 +1,14 @@
 {
-  "buildCommand": "npm run build",
+  "buildCommand": "SKIP_ENV_VALIDATION=true NEXT_TELEMETRY_DISABLED=1 next build",
   "framework": "nextjs",
-  "installCommand": "npm install"
+  "installCommand": "npm ci --prefer-offline --no-audit --legacy-peer-deps",
+  "devCommand": "next dev",
+  "outputDirectory": ".next",
+  "regions": ["iad1"],
+  "functions": {
+    "app/api/**/*.ts": {
+      "maxDuration": 30
+    }
+  },
+  "crons": []
 }

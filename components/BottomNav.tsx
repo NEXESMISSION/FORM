@@ -1,5 +1,6 @@
 'use client'
 
+import { useEffect, useState, Component, ReactNode } from 'react'
 import Link from 'next/link'
 import { usePathname, useSearchParams } from 'next/navigation'
 import { Home, FolderOpen, User } from 'lucide-react'
@@ -10,9 +11,55 @@ const navItems = [
   { href: '/dashboard/applicant?tab=profile', label: 'الملف', icon: User, match: (p: string, q: URLSearchParams) => p === '/dashboard/applicant' && q.get('tab') === 'profile' },
 ]
 
+// Error boundary for BottomNav to prevent useContext errors
+class BottomNavErrorBoundary extends Component<
+  { children: ReactNode },
+  { hasError: boolean }
+> {
+  constructor(props: { children: ReactNode }) {
+    super(props)
+    this.state = { hasError: false }
+  }
+
+  static getDerivedStateFromError() {
+    return { hasError: true }
+  }
+
+  componentDidCatch(error: Error) {
+    console.warn('[BottomNav] Error caught:', error)
+  }
+
+  render() {
+    if (this.state.hasError) {
+      return <div className="fixed bottom-4 left-1/2 -translate-x-1/2 z-50 w-[calc(100%-2rem)] max-w-[28rem] h-20" aria-hidden="true" />
+    }
+    return this.props.children
+  }
+}
+
 export default function BottomNav() {
+  const [mounted, setMounted] = useState(false)
+  useEffect(() => setMounted(true), [])
+  if (!mounted) {
+    return <div className="fixed bottom-4 left-1/2 -translate-x-1/2 z-50 w-[calc(100%-2rem)] max-w-[28rem] h-20" aria-hidden="true" />
+  }
+  return (
+    <BottomNavErrorBoundary>
+      <BottomNavInner />
+    </BottomNavErrorBoundary>
+  )
+}
+
+function BottomNavInner() {
   const pathname = usePathname()
   const searchParams = useSearchParams()
+  
+  // Safety check: if hooks return null/undefined, render placeholder
+  if (!pathname && !searchParams) {
+    return (
+      <div className="fixed bottom-4 left-1/2 -translate-x-1/2 z-50 w-[calc(100%-2rem)] max-w-[28rem] h-20" aria-hidden="true" />
+    )
+  }
 
   return (
     <nav
@@ -26,6 +73,7 @@ export default function BottomNav() {
             <Link
               key={href}
               href={href}
+              prefetch={true}
               className={`flex flex-col items-center justify-center gap-1.5 flex-1 py-2.5 rounded-xl transition-colors min-w-0 ${
                 active ? 'text-primary-600' : 'text-gray-400'
               }`}

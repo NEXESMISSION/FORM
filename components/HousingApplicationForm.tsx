@@ -4,7 +4,7 @@ import { useState, useEffect, useCallback, useRef } from 'react'
 import { useRouter } from 'next/navigation'
 import { supabase } from '@/lib/supabase'
 import toast from 'react-hot-toast'
-import { Save, ArrowRight, ArrowLeft } from 'lucide-react'
+import { Save, ArrowRight, ArrowLeft, Mic, MicOff, Trash2 } from 'lucide-react'
 
 const STORAGE_KEY_PREFIX = 'housing_form_draft_'
 
@@ -29,6 +29,7 @@ export interface HousingFormData {
   // 2 الوضعية المهنية
   employment_status?: string // موظف قار، بعقد، عامل حر، صاحب مشروع، عاطل
   work_sector?: string // عمومي / خاص / غير منظم
+  skills?: string // المهارات
   net_monthly_income?: number
   income_stable?: string // نعم / لا
   extra_income?: string
@@ -71,11 +72,21 @@ export interface HousingFormData {
   company_provide_full_property?: string
 
   // 6 نموذج السكن المطلوب
-  housing_model?: string // 60, 80, 100 m²
+  housing_type_model?: string // APARTMENT, VILLA, etc.
+  housing_individual_collective?: string // فردي / جماعي
+  housing_area?: string // 60, 80, 100, custom
+  housing_area_custom?: number // Custom area value
+  housing_model?: string // 60, 80, 100 m² (kept for backward compatibility)
   accept_area_adjustment?: string
+  desired_total_area?: string // المساحة الجملية المرغوبة
+  number_of_rooms?: string // عدد الغرف المطلوبة
+  additional_components?: string[] // مكونات إضافية مرغوبة
+  housing_purpose?: string // الهدف من السكن
 
   // 7 مدة التقسيط
-  installment_period?: string // 10, 15, 20
+  payment_type?: string // تقسيط / دفع كامل
+  payment_percentage?: number // النسبة المدفوعة (1%-...)
+  installment_period?: string // 5, 10, 15, 20, 25 سنوات
 
   // 8 الشراكة مع الدولة
   agree_state_referral?: string
@@ -86,6 +97,8 @@ export interface HousingFormData {
 
   // 9 معلومات إضافية
   additional_info?: string
+  additional_info_type?: string // نص / صوت
+  additional_info_voice_url?: string // رابط التسجيل الصوتي
 }
 
 const TOTAL_SECTIONS = 11
@@ -102,6 +115,12 @@ export default function HousingApplicationForm() {
   const [formData, setFormData] = useState<Partial<HousingFormData>>({})
   const [userId, setUserId] = useState<string | null>(null)
   const [hydrationDone, setHydrationDone] = useState(false)
+  const [isRecording, setIsRecording] = useState(false)
+  const [recordingTime, setRecordingTime] = useState(0)
+  const [mediaRecorder, setMediaRecorder] = useState<MediaRecorder | null>(null)
+  const recordingTimerRef = useRef<NodeJS.Timeout | null>(null)
+  const audioRef = useRef<HTMLAudioElement | null>(null)
+  const recordingStreamRef = useRef<MediaStream | null>(null)
 
   // Load draft from localStorage on mount
   useEffect(() => {
@@ -153,6 +172,21 @@ export default function HousingApplicationForm() {
     return () => window.removeEventListener('beforeunload', onBeforeUnload)
   }, [saveDraft, hydrationDone])
 
+  // Cleanup recording on unmount
+  useEffect(() => {
+    return () => {
+      if (recordingTimerRef.current) {
+        clearInterval(recordingTimerRef.current)
+      }
+      if (mediaRecorder && mediaRecorder.state !== 'inactive') {
+        mediaRecorder.stop()
+      }
+      if (recordingStreamRef.current) {
+        recordingStreamRef.current.getTracks().forEach(track => track.stop())
+      }
+    }
+  }, [mediaRecorder])
+
   const updateFormData = (field: keyof HousingFormData, value: any) => {
     setFormData(prev => ({ ...prev, [field]: value }))
   }
@@ -181,7 +215,17 @@ export default function HousingApplicationForm() {
       const first = (formData.full_name || '').trim().split(/\s+/)[0] || ''
       const last = (formData.full_name || '').trim().split(/\s+/).slice(1).join(' ') || ''
 
-      const payload = {
+      // Calculate required_area from new fields or old field
+      let requiredArea: number | null = null
+      if (formData.housing_area_custom) {
+        requiredArea = formData.housing_area_custom
+      } else if (formData.housing_area && formData.housing_area !== 'custom') {
+        requiredArea = parseInt(formData.housing_area, 10)
+      } else if (formData.housing_model) {
+        requiredArea = parseInt(formData.housing_model, 10)
+      }
+
+      const payload: any = {
         user_id: user.id,
         status: 'in_progress',
         first_name: first || '—',
@@ -196,7 +240,23 @@ export default function HousingApplicationForm() {
         governorate: formData.current_address || '',
         desired_housing_type: 'apartment' as const,
         maximum_budget: formData.max_monthly_payment ?? null,
-        required_area: formData.housing_model ? parseInt(formData.housing_model, 10) : null,
+        required_area: requiredArea,
+        // New fields
+        skills: formData.skills || null,
+        housing_type_model: formData.housing_type_model || null,
+        housing_individual_collective: formData.housing_individual_collective || null,
+        housing_area: formData.housing_area || null,
+        housing_area_custom: formData.housing_area_custom || null,
+        desired_total_area: formData.desired_total_area || null,
+        number_of_rooms: formData.number_of_rooms || null,
+        additional_components: formData.additional_components || [],
+        housing_purpose: formData.housing_purpose || null,
+        payment_type: formData.payment_type || null,
+        payment_percentage: formData.payment_percentage || null,
+        installment_period: formData.installment_period || null,
+        additional_info: formData.additional_info || null,
+        additional_info_type: formData.additional_info_type || null,
+        additional_info_voice_url: formData.additional_info_voice_url || null,
       }
 
       const { data: inserted, error } = await supabase
@@ -383,6 +443,16 @@ export default function HousingApplicationForm() {
             <div>
               <label className="form-label">مداخيل إضافية (إن وجدت)</label>
               <input type="text" value={formData.extra_income || ''} onChange={(e) => updateFormData('extra_income', e.target.value)} className="form-input" placeholder="اختياري" />
+            </div>
+            <div>
+              <label className="form-label">المهارات (اختياري)</label>
+              <textarea 
+                value={formData.skills || ''} 
+                onChange={(e) => updateFormData('skills', e.target.value)} 
+                className="form-input" 
+                rows={3}
+                placeholder="اذكر مهاراتك المهنية أو الحرفية..."
+              />
             </div>
           </div>
         )}
@@ -648,16 +718,130 @@ export default function HousingApplicationForm() {
         {/* Section 6: نموذج السكن المطلوب */}
         {currentSection === 6 && (
           <div className="space-y-6">
-            <h2 className="text-xl font-bold border-b pb-2">6️⃣ نموذج السكن المطلوب</h2>
+            <h2 className="text-xl font-bold border-b pb-2">6️⃣ معلومات حول نوع السكن المطلوب</h2>
+            <p className="text-sm text-gray-600 mb-4">يرجى من المترشح اختيار نوع السكن الذي يتناسب مع احتياجاته العائلية وقدرته التمويلية:</p>
+            
             <div>
-              <label className="form-label">اختر النموذج المناسب:</label>
-              <select value={formData.housing_model || ''} onChange={(e) => updateFormData('housing_model', e.target.value)} className="form-input">
+              <label className="form-label">نوع السكن *</label>
+              <select value={formData.housing_type_model || ''} onChange={(e) => updateFormData('housing_type_model', e.target.value)} className="form-input" required>
                 <option value="">اختر...</option>
-                <option value="60">نموذج 60 م² (سكن اقتصادي أساسي)</option>
-                <option value="80">نموذج 80 م² (سكن اقتصادي متوسط)</option>
-                <option value="100">نموذج 100 م² (سكن اقتصادي مريح)</option>
+                <option value="شقة">شقة (APARTMENT)</option>
+                <option value="فيلا اقتصادية">فيلا اقتصادية (VILLA)</option>
+                <option value="مسكن فردي مستقل">مسكن فردي مستقل</option>
+                <option value="شقة ضمن عمارة">شقة ضمن عمارة (سكن جماعي)</option>
+                <option value="مسكن قابل للتوسعة">مسكن قابل للتوسعة مستقبلاً</option>
               </select>
             </div>
+
+            <div>
+              <label className="form-label">النوع: فردي / جماعي *</label>
+              <select value={formData.housing_individual_collective || ''} onChange={(e) => updateFormData('housing_individual_collective', e.target.value)} className="form-input" required>
+                <option value="">اختر...</option>
+                <option value="فردي">فردي</option>
+                <option value="جماعي">جماعي</option>
+              </select>
+            </div>
+
+            <div>
+              <label className="form-label">المساحة الجملية المرغوبة *</label>
+              <div className="space-y-2">
+                <div className="grid grid-cols-2 gap-2">
+                  {['60', '80', '100', 'أكثر من 100'].map((area) => {
+                    const value = area === 'أكثر من 100' ? 'custom' : area
+                    const isChecked = formData.housing_area === value || (!formData.housing_area && formData.housing_model === area)
+                    return (
+                      <label key={area} className="flex items-center gap-2 p-3 rounded-xl border border-gray-200 hover:border-primary-400 cursor-pointer">
+                        <input 
+                          type="radio" 
+                          name="housing_area" 
+                          value={value}
+                          checked={isChecked}
+                          onChange={(e) => {
+                            updateFormData('housing_area', e.target.value)
+                            if (e.target.value !== 'custom') updateFormData('housing_model', area)
+                          }}
+                          className="text-primary-600"
+                        />
+                        <span className="text-sm">{area === 'أكثر من 100' ? 'أكثر من 100 م²' : `${area} م²`}</span>
+                      </label>
+                    )
+                  })}
+                </div>
+                {formData.housing_area === 'custom' && (
+                  <div className="mt-2">
+                    <label className="form-label text-sm">المساحة المخصصة (م²)</label>
+                    <input 
+                      type="number" 
+                      min={100} 
+                      value={formData.housing_area_custom ?? ''} 
+                      onChange={(e) => updateFormData('housing_area_custom', e.target.value === '' ? undefined : parseFloat(e.target.value))} 
+                      className="form-input" 
+                      placeholder="مثال: 120"
+                    />
+                  </div>
+                )}
+              </div>
+            </div>
+
+            <div>
+              <label className="form-label">عدد الغرف المطلوبة</label>
+              <div className="grid grid-cols-2 gap-2 mt-2">
+                {['غرفة نوم واحدة', 'غرفتان', 'ثلاث غرف', 'أكثر'].map((rooms) => (
+                  <label key={rooms} className="flex items-center gap-2 p-3 rounded-xl border border-gray-200 hover:border-primary-400 cursor-pointer">
+                    <input 
+                      type="radio" 
+                      name="number_of_rooms" 
+                      value={rooms}
+                      checked={formData.number_of_rooms === rooms}
+                      onChange={(e) => updateFormData('number_of_rooms', e.target.value)}
+                      className="text-primary-600"
+                    />
+                    <span className="text-sm">{rooms}</span>
+                  </label>
+                ))}
+              </div>
+            </div>
+
+            <div>
+              <label className="form-label">مكونات إضافية مرغوبة</label>
+              <div className="space-y-2 mt-2">
+                {['مطبخ مستقل', 'شرفة', 'حديقة صغيرة', 'مكان لوقوف السيارة', 'إمكانية التوسعة لاحقاً'].map((comp) => (
+                  <label key={comp} className="flex items-center gap-2 p-2 rounded-xl border border-gray-100 hover:bg-gray-50 cursor-pointer">
+                    <input 
+                      type="checkbox" 
+                      checked={(formData.additional_components || []).includes(comp)}
+                      onChange={() => {
+                        const arr = formData.additional_components || []
+                        const next = arr.includes(comp) ? arr.filter(c => c !== comp) : [...arr, comp]
+                        updateFormData('additional_components', next)
+                      }}
+                      className="rounded text-primary-600"
+                    />
+                    <span className="text-sm">{comp}</span>
+                  </label>
+                ))}
+              </div>
+            </div>
+
+            <div>
+              <label className="form-label">الهدف من السكن</label>
+              <div className="space-y-2 mt-2">
+                {['سكن رئيسي', 'استثمار', 'سكن لعائلة مستقبلية'].map((purpose) => (
+                  <label key={purpose} className="flex items-center gap-2 p-3 rounded-xl border border-gray-200 hover:border-primary-400 cursor-pointer">
+                    <input 
+                      type="radio" 
+                      name="housing_purpose" 
+                      value={purpose}
+                      checked={formData.housing_purpose === purpose}
+                      onChange={(e) => updateFormData('housing_purpose', e.target.value)}
+                      className="text-primary-600"
+                    />
+                    <span className="text-sm">{purpose}</span>
+                  </label>
+                ))}
+              </div>
+            </div>
+
             <div>
               <label className="form-label">هل تقبل بتعديل المساحة حسب قدرتك المالية؟ (نعم / لا)</label>
               <select value={formData.accept_area_adjustment || ''} onChange={(e) => updateFormData('accept_area_adjustment', e.target.value)} className="form-input">
@@ -672,16 +856,53 @@ export default function HousingApplicationForm() {
         {/* Section 7: مدة التقسيط */}
         {currentSection === 7 && (
           <div className="space-y-6">
-            <h2 className="text-xl font-bold border-b pb-2">7️⃣ مدة التقسيط</h2>
+            <h2 className="text-xl font-bold border-b pb-2">7️⃣ مدة التقسيط وطريقة الدفع</h2>
+            
             <div>
-              <label className="form-label">اختر مدة التقسيط:</label>
-              <select value={formData.installment_period || ''} onChange={(e) => updateFormData('installment_period', e.target.value)} className="form-input">
+              <label className="form-label">نوع الدفع *</label>
+              <select value={formData.payment_type || ''} onChange={(e) => updateFormData('payment_type', e.target.value)} className="form-input" required>
                 <option value="">اختر...</option>
-                <option value="10">10 سنوات</option>
-                <option value="15">15 سنة</option>
-                <option value="20">20 سنة</option>
+                <option value="تقسيط">تقسيط</option>
+                <option value="دفع كامل">دفع كامل</option>
               </select>
             </div>
+
+            {formData.payment_type === 'تقسيط' && (
+              <>
+                <div>
+                  <label className="form-label">النسبة المدفوعة مسبقاً (%)</label>
+                  <input 
+                    type="number" 
+                    min={1} 
+                    max={100} 
+                    step={1}
+                    value={formData.payment_percentage ?? ''} 
+                    onChange={(e) => updateFormData('payment_percentage', e.target.value === '' ? undefined : parseFloat(e.target.value))} 
+                    className="form-input" 
+                    placeholder="مثال: 20"
+                  />
+                  <p className="text-xs text-gray-500 mt-1">أدخل النسبة المئوية التي يمكنك دفعها مسبقاً (من 1% إلى 100%)</p>
+                </div>
+
+                <div>
+                  <label className="form-label">مدة التقسيط (سنوات) *</label>
+                  <select value={formData.installment_period || ''} onChange={(e) => updateFormData('installment_period', e.target.value)} className="form-input" required>
+                    <option value="">اختر...</option>
+                    <option value="5">5 سنوات</option>
+                    <option value="10">10 سنوات</option>
+                    <option value="15">15 سنة</option>
+                    <option value="20">20 سنة</option>
+                    <option value="25">25 سنة</option>
+                  </select>
+                </div>
+              </>
+            )}
+
+            {formData.payment_type === 'دفع كامل' && (
+              <div className="rounded-xl bg-primary-50 border border-primary-200 p-4">
+                <p className="text-sm text-primary-900 font-medium">سيتم التواصل معك لتحديد طريقة الدفع الكامل والتفاصيل.</p>
+              </div>
+            )}
           </div>
         )}
 
@@ -736,10 +957,233 @@ export default function HousingApplicationForm() {
         {currentSection === 9 && (
           <div className="space-y-6">
             <h2 className="text-xl font-bold border-b pb-2">9️⃣ معلومات إضافية</h2>
+            
             <div>
-              <label className="form-label">صف وضعيتك أو مشكلتك السكنية بإيجاز</label>
-              <textarea rows={5} value={formData.additional_info || ''} onChange={(e) => updateFormData('additional_info', e.target.value)} className="form-input" />
+              <label className="form-label">اختر طريقة الشرح</label>
+              <div className="grid grid-cols-2 gap-3 mb-4">
+                <button
+                  type="button"
+                  onClick={() => updateFormData('additional_info_type', 'text')}
+                  className={`p-4 rounded-xl border-2 transition-all ${
+                    formData.additional_info_type === 'text' || !formData.additional_info_type
+                      ? 'border-primary-600 bg-primary-50 text-primary-900'
+                      : 'border-gray-200 hover:border-gray-300'
+                  }`}
+                >
+                  <span className="text-sm font-medium">📝 نص</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => updateFormData('additional_info_type', 'voice')}
+                  className={`p-4 rounded-xl border-2 transition-all ${
+                    formData.additional_info_type === 'voice'
+                      ? 'border-primary-600 bg-primary-50 text-primary-900'
+                      : 'border-gray-200 hover:border-gray-300'
+                  }`}
+                >
+                  <span className="text-sm font-medium">🎤 صوت</span>
+                </button>
+              </div>
             </div>
+
+            {(formData.additional_info_type === 'text' || !formData.additional_info_type) && (
+              <div>
+                <label className="form-label">صف وضعيتك أو مشكلتك السكنية بإيجاز</label>
+                <textarea 
+                  rows={5} 
+                  value={formData.additional_info || ''} 
+                  onChange={(e) => updateFormData('additional_info', e.target.value)} 
+                  className="form-input" 
+                  placeholder="اشرح وضعيتك السكنية والمشاكل التي تواجهها..."
+                />
+              </div>
+            )}
+
+            {formData.additional_info_type === 'voice' && (
+              <div className="space-y-4">
+                <div className="rounded-xl border-2 border-gray-200 p-6">
+                  {formData.additional_info_voice_url ? (
+                    <div className="space-y-3">
+                      <div className="flex items-center justify-between">
+                        <span className="text-sm font-medium text-gray-700">تم تسجيل الصوت</span>
+                        <div className="flex gap-2">
+                          <audio ref={audioRef} src={formData.additional_info_voice_url} controls className="h-8" />
+                          <button
+                            type="button"
+                            onClick={async () => {
+                              if (formData.additional_info_voice_url) {
+                                try {
+                                  const path = formData.additional_info_voice_url.split('/').slice(-3).join('/')
+                                  await supabase.storage.from('documents').remove([path])
+                                } catch (_) {}
+                              }
+                              updateFormData('additional_info_voice_url', undefined)
+                            }}
+                            className="p-2 rounded-lg bg-red-100 text-red-700 hover:bg-red-200"
+                          >
+                            <Trash2 className="w-4 h-4" />
+                          </button>
+                        </div>
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="text-center space-y-4">
+                      <p className="text-sm text-gray-600">اضغط على الزر لتسجيل صوتك وشرح وضعيتك</p>
+                      <button
+                        type="button"
+                        onClick={async () => {
+                          if (isRecording) {
+                            // Stop recording
+                            if (mediaRecorder && mediaRecorder.state !== 'inactive') {
+                              mediaRecorder.stop()
+                            }
+                            setIsRecording(false)
+                            if (recordingTimerRef.current) {
+                              clearInterval(recordingTimerRef.current)
+                              setRecordingTime(0)
+                            }
+                          } else {
+                            // Start recording
+                            try {
+                              // Check if mediaDevices is available
+                              if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+                                toast.error('المتصفح لا يدعم التسجيل الصوتي')
+                                return
+                              }
+
+                              // Check permission first
+                              let permissionStatus: PermissionStatus | null = null
+                              try {
+                                permissionStatus = await navigator.permissions.query({ name: 'microphone' as PermissionName })
+                              } catch (permError) {
+                                // Permission API not supported, continue anyway
+                              }
+
+                              if (permissionStatus?.state === 'denied') {
+                                toast.error('تم رفض الوصول إلى الميكروفون. يرجى تفعيله من إعدادات المتصفح.')
+                                return
+                              }
+
+                              // Request microphone access
+                              const stream = await navigator.mediaDevices.getUserMedia({ 
+                                audio: {
+                                  echoCancellation: true,
+                                  noiseSuppression: true,
+                                  autoGainControl: true
+                                } 
+                              })
+
+                              // Check if MediaRecorder is supported
+                              if (!MediaRecorder.isTypeSupported('audio/webm')) {
+                                toast.error('نوع التسجيل غير مدعوم في هذا المتصفح')
+                                stream.getTracks().forEach(track => track.stop())
+                                return
+                              }
+
+                              const recorder = new MediaRecorder(stream, {
+                                mimeType: MediaRecorder.isTypeSupported('audio/webm') ? 'audio/webm' : 'audio/mp4'
+                              })
+                              const chunks: Blob[] = []
+                              
+                              recorder.ondataavailable = (e) => {
+                                if (e.data && e.data.size > 0) {
+                                  chunks.push(e.data)
+                                }
+                              }
+                              
+                              recorder.onerror = (e) => {
+                                console.error('Recording error:', e)
+                                toast.error('حدث خطأ أثناء التسجيل')
+                                setIsRecording(false)
+                                if (recordingTimerRef.current) {
+                                  clearInterval(recordingTimerRef.current)
+                                  setRecordingTime(0)
+                                }
+                                stream.getTracks().forEach(track => track.stop())
+                              }
+                              
+                              recorder.onstop = async () => {
+                                try {
+                                  const audioBlob = new Blob(chunks, { type: recorder.mimeType || 'audio/webm' })
+                                  
+                                  if (audioBlob.size === 0) {
+                                    toast.error('التسجيل فارغ. حاول مرة أخرى.')
+                                    stream.getTracks().forEach(track => track.stop())
+                                    recordingStreamRef.current = null
+                                    return
+                                  }
+                                  
+                                  // Upload to Supabase
+                                  if (userId) {
+                                    const fileName = `voice-notes/${userId}/${Date.now()}.webm`
+                                    const { error: uploadError, data } = await supabase.storage
+                                      .from('documents')
+                                      .upload(fileName, audioBlob, { contentType: recorder.mimeType || 'audio/webm' })
+                                    
+                                    if (!uploadError && data) {
+                                      const { data: { publicUrl } } = supabase.storage.from('documents').getPublicUrl(fileName)
+                                      updateFormData('additional_info_voice_url', publicUrl)
+                                      toast.success('تم حفظ التسجيل بنجاح')
+                                    } else {
+                                      console.error('Upload error:', uploadError)
+                                      toast.error('فشل رفع التسجيل: ' + (uploadError?.message || 'خطأ غير معروف'))
+                                    }
+                                  } else {
+                                    toast.error('يرجى تسجيل الدخول أولاً')
+                                  }
+                                } catch (uploadErr: any) {
+                                  console.error('Upload error:', uploadErr)
+                                  toast.error('فشل حفظ التسجيل')
+                                } finally {
+                                  stream.getTracks().forEach(track => track.stop())
+                                  recordingStreamRef.current = null
+                                }
+                              }
+                              
+                              recorder.start(1000) // Collect data every second
+                              setMediaRecorder(recorder)
+                              recordingStreamRef.current = stream
+                              setIsRecording(true)
+                              
+                              // Timer
+                              let time = 0
+                              recordingTimerRef.current = setInterval(() => {
+                                time += 1
+                                setRecordingTime(time)
+                              }, 1000)
+                            } catch (error: any) {
+                              console.error('Microphone access error:', error)
+                              setIsRecording(false)
+                              
+                              // Better error messages
+                              if (error.name === 'NotAllowedError' || error.name === 'PermissionDeniedError') {
+                                toast.error('تم رفض الوصول إلى الميكروفون. يرجى السماح بالوصول من إعدادات المتصفح.')
+                              } else if (error.name === 'NotFoundError' || error.name === 'DevicesNotFoundError') {
+                                toast.error('لم يتم العثور على ميكروفون. تأكد من توصيله.')
+                              } else if (error.name === 'NotReadableError' || error.name === 'TrackStartError') {
+                                toast.error('الميكروفون مستخدم من قبل تطبيق آخر. أغلق التطبيقات الأخرى وحاول مرة أخرى.')
+                              } else {
+                                toast.error('فشل الوصول إلى الميكروفون: ' + (error.message || 'خطأ غير معروف'))
+                              }
+                            }
+                          }
+                        }}
+                        className={`w-20 h-20 rounded-full flex items-center justify-center text-white transition-all ${
+                          isRecording ? 'bg-red-600 hover:bg-red-700 animate-pulse' : 'bg-primary-800 hover:bg-primary-900'
+                        }`}
+                      >
+                        {isRecording ? <MicOff className="w-8 h-8" /> : <Mic className="w-8 h-8" />}
+                      </button>
+                      {isRecording && (
+                        <p className="text-sm text-gray-600">
+                          جاري التسجيل... {Math.floor(recordingTime / 60)}:{(recordingTime % 60).toString().padStart(2, '0')}
+                        </p>
+                      )}
+                    </div>
+                  )}
+                </div>
+              </div>
+            )}
           </div>
         )}
 

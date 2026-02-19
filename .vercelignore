@@ -1,0 +1,19 @@
+# Exclude unnecessary files from Vercel deployment
+node_modules
+.next
+.git
+.env.local
+.env*.local
+*.log
+.DS_Store
+*.md
+supabase/
+*.example
+.vscode
+.idea
+*.txt
+terminals/
+*.planmd
+webapp planmd
+app/api/sms/send/route-twilio.ts
+app/api/sms/send/route-alternative.ts
