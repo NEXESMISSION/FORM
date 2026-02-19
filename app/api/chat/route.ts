@@ -115,7 +115,15 @@ const SYSTEM_PROMPT = `أنت مساعد ذكي وودود لخدمة DOMOBAT (�
 export async function POST(request: NextRequest) {
   try {
     // Check rate limit (applies to both authenticated and unauthenticated users)
-    const rateLimitResult = await apiRateLimit(request)
+    let rateLimitResult
+    try {
+      rateLimitResult = await apiRateLimit(request)
+    } catch (rateLimitError) {
+      console.error('Rate limit check failed:', rateLimitError)
+      // Continue without rate limiting if it fails
+      rateLimitResult = { allowed: true, remaining: 60, resetTime: Date.now() + 60000 }
+    }
+    
     if (!rateLimitResult.allowed) {
       return NextResponse.json(
         { 
@@ -163,7 +171,13 @@ export async function POST(request: NextRequest) {
 
     // Detect intent from last user message for better context
     const lastUserMessage = messages.filter(m => m.role === 'user').pop()?.content || ''
-    const intent = detectIntent(lastUserMessage)
+    let intent = null
+    try {
+      intent = detectIntent(lastUserMessage)
+    } catch (intentError) {
+      console.error('Intent detection failed:', intentError)
+      // Continue without intent detection if it fails
+    }
     
     // Add context hint to system message if intent detected
     let enhancedSystemPrompt = SYSTEM_PROMPT
@@ -207,10 +221,15 @@ export async function POST(request: NextRequest) {
     const content = sanitizeInput(rawContent)
     
     return NextResponse.json({ message: content })
-  } catch (e) {
+  } catch (e: any) {
     console.error('Chat API error:', e)
+    console.error('Error stack:', e?.stack)
+    console.error('Error message:', e?.message)
     return NextResponse.json(
-      { error: 'حدث خطأ. جرّب لاحقاً.' },
+      { 
+        error: 'حدث خطأ. جرّب لاحقاً.',
+        details: process.env.NODE_ENV === 'development' ? e?.message : undefined
+      },
       { status: 500 }
     )
   }
