@@ -4,8 +4,8 @@
   "private": true,
   "scripts": {
     "dev": "next dev --turbo",
-    "build": "SKIP_ENV_VALIDATION=true next build",
-    "build:fast": "SKIP_ENV_VALIDATION=true next build --no-lint",
+    "build": "cross-env SKIP_ENV_VALIDATION=true next build",
+    "build:fast": "cross-env SKIP_ENV_VALIDATION=true next build --no-lint",
     "start": "next start",
     "lint": "next lint",
     "type-check": "tsc --noEmit"
@@ -30,6 +30,7 @@
     "@types/react": "^18.2.42",
     "@types/react-dom": "^18.2.17",
     "autoprefixer": "^10.4.16",
+    "cross-env": "^10.1.0",
     "eslint": "^8.54.0",
     "eslint-config-next": "^14.0.0",
     "postcss": "^8.4.32",

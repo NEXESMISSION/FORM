@@ -15,6 +15,7 @@ const STATUS_LABELS: Record<string, string> = {
   pending: 'قيد المعالجة',
   in_progress: 'قيد المعالجة',
   documents_requested: 'طلب مستندات إضافية',
+  documents_rejected: 'مستندات مرفوضة - مطلوب استبدال',
   approved: 'مقبول',
   rejected: 'مرفوض',
 }
@@ -149,8 +150,11 @@ function ApplicantDashboardContent() {
       }
       setUser(user)
       setProfile(profileData)
-    } catch { router.push('/auth/login') }
-    finally { setLoading(false) }
+    } catch {
+      router.push('/auth/login')
+    } finally {
+      setLoading(false)
+    }
   }
 
   const loadApplications = async () => {
@@ -467,6 +471,7 @@ function ApplicantDashboardContent() {
   const anyDocActionNeeded = applications.some((app: any) => {
     const isApproved = app.status === 'approved'
     const isDocsRequested = app.status === 'documents_requested'
+    const isDocsRejected = app.status === 'documents_rejected'
     const hasRejectedDoc = (app.applicant_documents && Array.isArray(app.applicant_documents)) && (app.applicant_documents as any[]).some((d: any) => d.status === 'rejected')
     const adminMessage = app.documents_requested_message?.trim()
     const isJustDocListMsg = isJustDocList(adminMessage)
@@ -477,8 +482,9 @@ function ApplicantDashboardContent() {
     // - Rejected docs (all rejected, no pending/accepted), OR 
     // - Missing docs, OR 
     // - Admin request (but not for approved apps, and not if it's just a doc list)
+    // - Status is documents_rejected
     // NOTE: Status "documents_requested" alone doesn't trigger - only if there are actual missing/rejected docs
-    return rejectedDocs.length > 0 || missing || (hasAdminMsg && !isApproved)
+    return rejectedDocs.length > 0 || missing || (hasAdminMsg && !isApproved) || isDocsRejected
   })
 
   type AlertItem = { type: 'missing' | 'admin_request' | 'rejected'; appId: string; date: string; text: string }
@@ -531,9 +537,9 @@ function ApplicantDashboardContent() {
   return (
     <div className="min-h-screen bg-surface flex flex-col pb-32">
       <header className="sticky top-0 z-10 bg-white/95 backdrop-blur border-b border-gray-100">
-        <div className="max-w-[28rem] mx-auto px-4 h-14 flex items-center justify-between">
+        <div className="max-w-[28rem] mx-auto px-4 h-20 flex items-center justify-between">
           <div className="flex items-center min-w-0">
-            <Image src="/logo.png" alt="DOMOBAT" width={112} height={112} className="rounded-2xl shrink-0 w-auto h-auto" />
+            <Image src="/logo.png" alt="DOMOBAT" width={112} height={112} className="rounded-2xl shrink-0 w-auto h-auto" priority />
           </div>
           <div className="flex items-center gap-2">
             <button
@@ -597,6 +603,7 @@ function ApplicantDashboardContent() {
                 const isApproved = app.status === 'approved'
                 const isRejected = app.status === 'rejected'
                 const isDocsRequested = app.status === 'documents_requested'
+                const isDocsRejected = app.status === 'documents_rejected'
                 const hasRejectedDoc = (app.applicant_documents && Array.isArray(app.applicant_documents)) && (app.applicant_documents as any[]).some((d: any) => d.status === 'rejected')
                 const missingLabels = getMissingDocLabelsForApp(app)
                 const rejectedDocs = getRejectedDocLabelsForApp(app)
@@ -608,8 +615,8 @@ function ApplicantDashboardContent() {
                 // - Has missing docs, OR 
                 // - Has admin request (but not for approved apps)
                 // NOTE: Status "documents_requested" alone doesn't trigger - only if there are actual missing/rejected docs
-                const needsDocAction = rejectedDocs.length > 0 || missingLabels.length > 0 || (hasAdminRequest && !isApproved)
-                const statusColor = isApproved ? 'bg-green-100 text-green-800 border-green-200' : isDocsRequested ? 'bg-amber-100 text-amber-800 border-amber-200' : isRejected ? 'bg-red-100 text-red-800 border-red-200' : 'bg-gray-100 text-gray-700 border-gray-200'
+                const needsDocAction = rejectedDocs.length > 0 || missingLabels.length > 0 || (hasAdminRequest && !isApproved) || isDocsRejected
+                const statusColor = isApproved ? 'bg-green-100 text-green-800 border-green-200' : isDocsRejected ? 'bg-red-100 text-red-800 border-red-200' : isDocsRequested ? 'bg-amber-100 text-amber-800 border-amber-200' : isRejected ? 'bg-red-100 text-red-800 border-red-200' : 'bg-gray-100 text-gray-700 border-gray-200'
                 const cardState = isRejected ? 'rejected' : needsDocAction ? 'documents' : isApproved ? 'approved' : 'default'
                 // Determine alert type for color coding
                 const alertType = rejectedDocs.length > 0 ? 'rejected' : missingLabels.length > 0 ? 'missing' : hasAdminRequest ? 'admin' : 'documents'
@@ -678,6 +685,7 @@ function ApplicantDashboardContent() {
                           <span className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-sm font-semibold border-2 ${
                             isApproved ? 'bg-green-50 text-green-700 border-green-200' :
                             isRejected ? 'bg-red-50 text-red-700 border-red-200' :
+                            isDocsRejected ? 'bg-red-50 text-red-700 border-red-200' :
                             isDocsRequested ? 'bg-amber-50 text-amber-700 border-amber-200' :
                             'bg-gray-50 text-gray-700 border-gray-200'
                           }`}>
@@ -776,7 +784,7 @@ function ApplicantDashboardContent() {
                       </div>
                     </Link>
                     {/* Upload Section */}
-                    {isDocsRequested && (app.documents_requested_message) && (
+                    {(isDocsRequested || isDocsRejected) && (app.documents_requested_message) && (
                       <div className="border-t-2 border-gray-100 bg-gray-50/50 px-5 py-4" onClick={(e) => e.stopPropagation()}>
                         <div className="flex items-center justify-between mb-3">
                           <p className="text-sm font-semibold text-gray-900">المطلوب منك</p>
