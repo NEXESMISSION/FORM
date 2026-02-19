@@ -27,9 +27,14 @@ yarn-error.log*
 # local env files
 .env*.local
 .env
+.env.build
 
 # vercel
 .vercel
+
+# build artifacts
+domobat-housing-app@*/
+next
 
 # typescript
 *.tsbuildinfo
