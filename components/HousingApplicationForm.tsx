@@ -538,8 +538,16 @@ export default function HousingApplicationForm() {
         localStorage.removeItem(key)
       } catch (_) {}
 
+      // Reset loading state before redirect
+      setLoading(false)
+      
       toast.success('تم إرسال الطلب بنجاح')
-      router.replace('/dashboard/applicant')
+      
+      // Use a small delay to ensure toast is shown, then redirect
+      // Use window.location for more reliable redirect
+      setTimeout(() => {
+        window.location.href = '/dashboard/applicant'
+      }, 800)
     } catch (error: any) {
       // Error handling is done in the if (error) block above
       // This catch is for unexpected errors
