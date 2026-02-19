@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect, useRef, useCallback } from 'react'
+import { useState, useEffect } from 'react'
 import Image from 'next/image'
 import { ChevronRight, ChevronLeft, Sparkles } from 'lucide-react'
 import { supabase } from '@/lib/supabase'
@@ -167,40 +167,6 @@ function buildMessages(firstName: string | null): { text: string }[] {
   ]
 }
 
-function useArabicVoice() {
-  const [voiceReady, setVoiceReady] = useState(false)
-  const voicesRef = useRef<SpeechSynthesisVoice[]>([])
-
-  useEffect(() => {
-    const load = () => {
-      const list = typeof window !== 'undefined' ? window.speechSynthesis?.getVoices() : []
-      voicesRef.current = list || []
-      setVoiceReady(voicesRef.current.length > 0)
-    }
-    load()
-    if (typeof window !== 'undefined' && window.speechSynthesis) {
-      window.speechSynthesis.onvoiceschanged = load
-      return () => { window.speechSynthesis.onvoiceschanged = null }
-    }
-  }, [])
-
-  const speak = useCallback((text: string, lang = 'ar-TN') => {
-    if (typeof window === 'undefined' || !window.speechSynthesis) return
-    window.speechSynthesis.cancel()
-    const u = new SpeechSynthesisUtterance(text)
-    u.lang = lang
-    u.rate = 0.9
-    const arVoice = voicesRef.current.find(v => v.lang.startsWith('ar'))
-    if (arVoice) u.voice = arVoice
-    window.speechSynthesis.speak(u)
-  }, [])
-
-  const stop = useCallback(() => {
-    if (typeof window !== 'undefined') window.speechSynthesis?.cancel()
-  }, [])
-
-  return { speak, stop, voiceReady }
-}
 
 type Props = {
   userName?: string | null
@@ -211,8 +177,6 @@ export default function IntroOnboarding({ userName, onDone }: Props) {
   const messages = buildMessages(userName || null)
   const [step, setStep] = useState(0)
   const [visible, setVisible] = useState(false)
-  const [voiceOn, setVoiceOn] = useState(true)
-  const { speak, stop, voiceReady } = useArabicVoice()
 
   const currentText = messages[step]?.text ?? ''
   const isFirst = step === 0
@@ -224,16 +188,7 @@ export default function IntroOnboarding({ userName, onDone }: Props) {
     return () => clearTimeout(t)
   }, [step])
 
-  useEffect(() => {
-    if (!currentText) return
-    if (voiceOn && voiceReady) {
-      const t = setTimeout(() => speak(currentText), 300)
-      return () => { clearTimeout(t); stop() }
-    }
-  }, [step, currentText, voiceOn, voiceReady, speak, stop])
-
   const goNext = async () => {
-    stop()
     if (isLast) {
       await setIntroSeen()
       onDone()
@@ -243,18 +198,16 @@ export default function IntroOnboarding({ userName, onDone }: Props) {
   }
 
   const goPrev = () => {
-    stop()
     if (!isFirst) setStep(s => s - 1)
   }
 
   const skip = async () => {
-    stop()
     await setIntroSeen()
     onDone()
   }
 
   return (
-    <div className="fixed inset-0 z-[100] flex flex-col bg-gradient-to-b from-primary-800 via-primary-900 to-gray-900 text-white overflow-hidden">
+    <div className="fixed inset-0 z-[100] flex flex-col bg-gradient-to-b from-gray-700 via-gray-800 to-gray-900 text-white overflow-hidden">
       {/* Skip link - top right, minimal */}
       <div className="shrink-0 flex justify-end px-4 pt-4">
         <button
@@ -287,7 +240,7 @@ export default function IntroOnboarding({ userName, onDone }: Props) {
               <span
                 key={i}
                 className={`h-1.5 rounded-full transition-all duration-300 ${
-                  i < step ? 'w-4 bg-primary-500' : i === step ? 'w-6 bg-white' : 'w-1.5 bg-white/30'
+                  i < step ? 'w-4 bg-gray-500' : i === step ? 'w-6 bg-white' : 'w-1.5 bg-white/30'
                 }`}
               />
             ))}
@@ -311,7 +264,7 @@ export default function IntroOnboarding({ userName, onDone }: Props) {
           <button
             type="button"
             onClick={goNext}
-            className="flex-1 sm:flex-none flex items-center justify-center gap-2 px-8 py-3.5 rounded-xl font-semibold bg-white text-primary-900 hover:bg-gray-100 active:scale-[0.98] transition-all shadow-lg"
+            className="flex-1 sm:flex-none flex items-center justify-center gap-2 px-8 py-3.5 rounded-xl font-semibold bg-white text-gray-900 hover:bg-gray-100 active:scale-[0.98] transition-all shadow-lg"
           >
             {isLast ? (
               <>

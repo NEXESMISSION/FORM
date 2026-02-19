@@ -114,14 +114,21 @@ export default function ChatWidget() {
       
       if (!res.ok) {
         // Handle different error statuses
+        const data = await res.json().catch(() => ({}))
+        const errorMessage = data.error || 'فشل الإرسال. يرجى المحاولة مرة أخرى.'
+        
         if (res.status === 404) {
           setError('خدمة الدردشة غير متاحة حالياً. يرجى المحاولة لاحقاً.')
         } else if (res.status === 503) {
-          const data = await res.json().catch(() => ({}))
-          setError(data.error || 'خدمة الدردشة غير مفعّلة. يرجى التواصل مع الدعم الفني.')
+          setError(errorMessage || 'خدمة الدردشة غير مفعّلة. يرجى التواصل مع الدعم الفني.')
+        } else if (res.status === 429) {
+          setError(errorMessage || 'تم تجاوز حد الطلبات. يرجى المحاولة لاحقاً.')
+        } else if (res.status === 502) {
+          setError(errorMessage || 'فشل الاتصال بخدمة الدردشة. تحقق من اتصال الإنترنت.')
+        } else if (res.status === 500) {
+          setError(errorMessage || 'حدث خطأ في الخادم. يرجى المحاولة لاحقاً.')
         } else {
-          const data = await res.json().catch(() => ({}))
-          setError(data.error || 'فشل الإرسال. يرجى المحاولة مرة أخرى.')
+          setError(errorMessage)
         }
         return
       }
@@ -150,41 +157,78 @@ export default function ChatWidget() {
       <button
         type="button"
         onClick={() => setOpen((o) => !o)}
-        className={`fixed z-[9999] flex items-center justify-center rounded-full bg-primary-600 text-white shadow-lg hover:bg-primary-700 hover:shadow-xl active:scale-95 w-14 h-14 sm:w-12 sm:h-12 border border-primary-700/30 touch-manipulation transition-all duration-300 ${
+        className={`fixed z-[9999] flex items-center justify-center rounded-full text-white shadow-2xl hover:shadow-3xl active:scale-95 touch-manipulation transition-all duration-300 group ${
           open ? 'sm:bottom-[26rem]' : ''
         }`}
         style={{ 
-          bottom: 'max(1rem, calc(env(safe-area-inset-bottom, 0px) + 1rem))',
+          bottom: 'max(7.5rem, calc(env(safe-area-inset-bottom, 0px) + 7.5rem))',
           right: 'max(1rem, calc(env(safe-area-inset-right, 0px) + 1rem))',
-          WebkitTapHighlightColor: 'transparent'
+          WebkitTapHighlightColor: 'transparent',
+          background: open 
+            ? 'linear-gradient(135deg, #1e40af 0%, #3b82f6 50%, #60a5fa 100%)'
+            : 'linear-gradient(135deg, #1e40af 0%, #3b82f6 100%)',
+          width: '3.5rem',
+          height: '3.5rem',
+          boxShadow: open 
+            ? '0 10px 30px -5px rgba(30, 64, 175, 0.4), 0 0 0 1px rgba(255, 255, 255, 0.1)'
+            : '0 8px 25px -5px rgba(30, 64, 175, 0.3), 0 0 0 1px rgba(255, 255, 255, 0.1)'
         }}
         aria-label="فتح الدردشة"
         title="دردشة"
+        onMouseEnter={(e) => {
+          if (!open) {
+            e.currentTarget.style.background = 'linear-gradient(135deg, #1e3a8a 0%, #2563eb 100%)'
+            e.currentTarget.style.transform = 'scale(1.05)'
+          }
+        }}
+        onMouseLeave={(e) => {
+          if (!open) {
+            e.currentTarget.style.background = 'linear-gradient(135deg, #1e40af 0%, #3b82f6 100%)'
+            e.currentTarget.style.transform = 'scale(1)'
+          }
+        }}
       >
-        <MessageCircle className="w-5 h-5 sm:w-6 sm:h-6 shrink-0" />
+        {open ? (
+          <X className="w-6 h-6 shrink-0 transition-transform duration-300 rotate-0" />
+        ) : (
+          <MessageCircle className="w-6 h-6 shrink-0 transition-transform duration-300 group-hover:scale-110" />
+        )}
+        {!open && (
+          <span className="absolute -top-1 -right-1 w-3 h-3 bg-red-500 rounded-full border-2 border-white animate-pulse" />
+        )}
       </button>
 
       {open && (
         <div
-          className="fixed z-[9998] flex flex-col bg-white border border-gray-200 rounded-t-3xl shadow-2xl inset-x-0 bottom-0 top-0 sm:inset-auto sm:right-4 sm:left-auto sm:bottom-24 sm:top-auto sm:w-[22rem] sm:max-h-[28rem] sm:rounded-3xl chat-container"
+          className="fixed z-[9998] flex flex-col bg-white rounded-t-3xl shadow-2xl inset-x-0 bottom-0 top-0 sm:inset-auto sm:right-4 sm:left-auto sm:bottom-24 sm:top-auto sm:w-[24rem] sm:max-h-[32rem] sm:rounded-3xl chat-container animate-in slide-up fade-in"
           style={{ 
             paddingTop: 'max(env(safe-area-inset-top, 0px), 0px)',
             paddingBottom: 'max(env(safe-area-inset-bottom, 0px), 0px)',
             height: '100dvh',
-            maxHeight: '100dvh'
+            maxHeight: '100dvh',
+            border: '1px solid rgba(30, 64, 175, 0.1)',
+            boxShadow: '0 20px 60px -15px rgba(0, 0, 0, 0.2), 0 0 0 1px rgba(30, 64, 175, 0.05)'
           }}
         >
-          <div className="shrink-0 flex items-center justify-between px-4 py-3 border-b border-gray-100 bg-gradient-to-r from-primary-600 to-primary-700 text-white rounded-t-3xl sm:rounded-t-3xl" style={{ paddingTop: 'max(env(safe-area-inset-top, 0px), 0.75rem)' }}>
-            <div className="flex items-center gap-2">
-              <div className="p-1.5 rounded-lg bg-white/20">
-                <Sparkles className="w-4 h-4" />
+          <div 
+            className="shrink-0 flex items-center justify-between px-5 py-4 text-white rounded-t-3xl sm:rounded-t-3xl relative overflow-hidden" 
+            style={{ 
+              paddingTop: 'max(env(safe-area-inset-top, 0px), 1rem)',
+              background: 'linear-gradient(135deg, #1e40af 0%, #3b82f6 50%, #60a5fa 100%)',
+              boxShadow: '0 4px 20px -5px rgba(30, 64, 175, 0.3)'
+            }}
+          >
+            <div className="absolute inset-0 bg-gradient-to-br from-white/10 to-transparent pointer-events-none" />
+            <div className="flex items-center gap-3 relative z-10">
+              <div className="p-2 rounded-xl bg-white/20 backdrop-blur-sm border border-white/30 shadow-lg">
+                <Sparkles className="w-5 h-5 animate-pulse" />
               </div>
               <div>
-                <span className="font-bold text-sm block">دردشة دوموبات</span>
-                <span className="text-xs text-primary-100">مساعدك الذكي</span>
+                <span className="font-bold text-base block leading-tight">دردشة دوموبات</span>
+                <span className="text-xs text-white/90 mt-0.5">مساعدك الذكي</span>
               </div>
             </div>
-            <div className="flex items-center gap-1">
+            <div className="flex items-center gap-1.5 relative z-10">
               {messages.length > 0 && (
                 <button
                   type="button"
@@ -194,13 +238,17 @@ export default function ChatWidget() {
                       clearSavedMessages()
                     }
                   }}
-                  className="p-2 rounded-xl hover:bg-white/20 transition-colors"
+                  className="p-2 rounded-xl hover:bg-white/20 transition-all hover:scale-110 active:scale-95"
                   title="حذف المحادثة"
                 >
                   <Trash2 className="w-4 h-4" />
                 </button>
               )}
-              <button type="button" onClick={() => setOpen(false)} className="p-2 rounded-xl hover:bg-white/20 transition-colors">
+              <button 
+                type="button" 
+                onClick={() => setOpen(false)} 
+                className="p-2 rounded-xl hover:bg-white/20 transition-all hover:scale-110 active:scale-95"
+              >
                 <X className="w-5 h-5" />
               </button>
             </div>
@@ -211,52 +259,52 @@ export default function ChatWidget() {
           >
             {messages.length === 0 && (
               <div className="space-y-4">
-                <div className="rounded-2xl rounded-tl-md bg-gradient-to-br from-primary-50 to-indigo-50 border border-primary-200 px-5 py-5 space-y-4 text-right">
-                  <div className="flex items-center gap-2">
-                    <div className="p-2 rounded-xl bg-primary-100">
-                      <Sparkles className="w-5 h-5 text-primary-600" />
+                <div className="rounded-3xl rounded-tl-md bg-gradient-to-br from-blue-50 via-indigo-50 to-purple-50 border border-blue-200/60 px-6 py-6 space-y-5 text-right shadow-sm">
+                  <div className="flex items-center gap-3">
+                    <div className="p-3 rounded-2xl bg-gradient-to-br from-blue-500 to-blue-600 shadow-lg">
+                      <Sparkles className="w-6 h-6 text-white" />
                     </div>
                     <div>
-                      <p className="font-bold text-primary-900 text-base">مرحباً بك في دردشة دوموبات 👋</p>
-                      <p className="text-xs text-primary-700 mt-0.5">مساعدك الذكي هنا لمساعدتك</p>
+                      <p className="font-bold text-gray-900 text-lg">مرحباً بك في دردشة دوموبات 👋</p>
+                      <p className="text-sm text-gray-600 mt-1">مساعدك الذكي هنا لمساعدتك</p>
                     </div>
                   </div>
-                  <p className="text-sm text-primary-800/90 leading-relaxed">
+                  <p className="text-sm text-gray-700 leading-relaxed font-medium">
                     يمكنك أن تسألني عن أي شيء متعلق بـ:
                   </p>
-                  <div className="grid grid-cols-1 gap-2">
-                    <div className="flex items-start gap-2 text-sm text-primary-800/90">
-                      <span className="text-primary-600 mt-0.5">✓</span>
-                      <span><strong>التسجيل والاستمارة</strong> — كيف تبدأ وكيف تملأ البيانات</span>
+                  <div className="grid grid-cols-1 gap-2.5">
+                    <div className="flex items-start gap-3 text-sm text-gray-700 bg-white/60 rounded-xl px-3 py-2.5 border border-blue-100">
+                      <span className="text-blue-600 mt-0.5 font-bold text-base">✓</span>
+                      <span><strong className="text-gray-900">التسجيل والاستمارة</strong> — كيف تبدأ وكيف تملأ البيانات</span>
                     </div>
-                    <div className="flex items-start gap-2 text-sm text-primary-800/90">
-                      <span className="text-primary-600 mt-0.5">✓</span>
-                      <span><strong>المستندات</strong> — ما تحتاجه من وثائق</span>
+                    <div className="flex items-start gap-3 text-sm text-gray-700 bg-white/60 rounded-xl px-3 py-2.5 border border-blue-100">
+                      <span className="text-blue-600 mt-0.5 font-bold text-base">✓</span>
+                      <span><strong className="text-gray-900">المستندات</strong> — ما تحتاجه من وثائق</span>
                     </div>
-                    <div className="flex items-start gap-2 text-sm text-primary-800/90">
-                      <span className="text-primary-600 mt-0.5">✓</span>
-                      <span><strong>المشاريع</strong> — استعراض المشاريع المتاحة</span>
+                    <div className="flex items-start gap-3 text-sm text-gray-700 bg-white/60 rounded-xl px-3 py-2.5 border border-blue-100">
+                      <span className="text-blue-600 mt-0.5 font-bold text-base">✓</span>
+                      <span><strong className="text-gray-900">المشاريع</strong> — استعراض المشاريع المتاحة</span>
                     </div>
-                    <div className="flex items-start gap-2 text-sm text-primary-800/90">
-                      <span className="text-primary-600 mt-0.5">✓</span>
-                      <span><strong>المتابعة</strong> — حالة طلبك ومراحل المشروع</span>
+                    <div className="flex items-start gap-3 text-sm text-gray-700 bg-white/60 rounded-xl px-3 py-2.5 border border-blue-100">
+                      <span className="text-blue-600 mt-0.5 font-bold text-base">✓</span>
+                      <span><strong className="text-gray-900">المتابعة</strong> — حالة طلبك ومراحل المشروع</span>
                     </div>
-                    <div className="flex items-start gap-2 text-sm text-primary-800/90">
-                      <span className="text-primary-600 mt-0.5">✓</span>
-                      <span><strong>التمويل والأسعار</strong> — معلومات عن التكلفة والدفع</span>
+                    <div className="flex items-start gap-3 text-sm text-gray-700 bg-white/60 rounded-xl px-3 py-2.5 border border-blue-100">
+                      <span className="text-blue-600 mt-0.5 font-bold text-base">✓</span>
+                      <span><strong className="text-gray-900">التمويل والأسعار</strong> — معلومات عن التكلفة والدفع</span>
                     </div>
                   </div>
                 </div>
                 
                 {/* Quick Questions */}
                 <div>
-                  <p className="text-xs font-medium text-gray-600 mb-2 px-1">أسئلة سريعة:</p>
+                  <p className="text-xs font-semibold text-gray-600 mb-3 px-1">أسئلة سريعة:</p>
                   <div className="flex flex-wrap gap-2">
                     {QUICK_QUESTIONS.map((q, idx) => (
                       <button
                         key={idx}
                         onClick={() => send(q)}
-                        className="px-3 py-2 text-xs rounded-xl bg-white border border-gray-200 hover:border-primary-300 hover:bg-primary-50 text-gray-700 hover:text-primary-700 transition-all text-right touch-manipulation"
+                        className="px-4 py-2.5 text-xs rounded-xl bg-white border-2 border-gray-200 hover:border-blue-400 hover:bg-blue-50 text-gray-700 hover:text-blue-700 transition-all text-right touch-manipulation shadow-sm hover:shadow-md font-medium"
                         style={{ WebkitTapHighlightColor: 'transparent' }}
                       >
                         {q}
@@ -269,16 +317,20 @@ export default function ChatWidget() {
             {messages.map((m, i) => (
               <div key={i} className={`flex ${m.role === 'user' ? 'justify-end' : 'justify-start'} animate-in fade-in slide-in-from-bottom-2`}>
                 <div
-                  className={`max-w-[85%] sm:max-w-[75%] px-4 py-3 rounded-2xl text-sm shadow-sm ${
+                  className={`max-w-[85%] sm:max-w-[75%] px-4 py-3 rounded-2xl text-sm ${
                     m.role === 'user'
-                      ? 'bg-primary-600 text-white rounded-tr-md'
-                      : 'bg-gray-100 text-gray-900 rounded-tl-md border border-gray-200'
+                      ? 'bg-gradient-to-br from-blue-600 to-blue-500 text-white rounded-tr-md shadow-lg shadow-blue-500/30'
+                      : 'bg-gradient-to-br from-gray-50 to-white text-gray-900 rounded-tl-md border border-gray-200/80 shadow-sm'
                   }`}
+                  style={m.role === 'user' ? {
+                    background: 'linear-gradient(135deg, #2563eb 0%, #3b82f6 100%)',
+                    boxShadow: '0 4px 12px -2px rgba(37, 99, 235, 0.3)'
+                  } : {}}
                 >
                   <p className="whitespace-pre-wrap leading-relaxed">{m.content}</p>
                   {m.timestamp && (
-                    <p className={`text-xs mt-1.5 ${
-                      m.role === 'user' ? 'text-primary-100' : 'text-gray-500'
+                    <p className={`text-xs mt-2 ${
+                      m.role === 'user' ? 'text-blue-100' : 'text-gray-500'
                     }`}>
                       {(() => {
                         const timestamp = typeof m.timestamp === 'string' ? new Date(m.timestamp) : m.timestamp
@@ -315,19 +367,19 @@ export default function ChatWidget() {
             )}
           </div>
           <div 
-            className="shrink-0 p-3 border-t border-gray-100 bg-gray-50/50"
+            className="shrink-0 p-4 border-t border-gray-100 bg-gradient-to-b from-white to-gray-50/50"
             style={{ 
-              paddingBottom: 'max(env(safe-area-inset-bottom, 0px), 0.75rem)'
+              paddingBottom: 'max(env(safe-area-inset-bottom, 0px), 1rem)'
             }}
           >
             {messages.length > 0 && messages.length < 3 && (
-              <div className="mb-2 flex flex-wrap gap-1.5">
+              <div className="mb-3 flex flex-wrap gap-2">
                 {QUICK_QUESTIONS.slice(0, 3).map((q, idx) => (
                   <button
                     key={idx}
                     onClick={() => send(q)}
                     disabled={loading}
-                    className="px-2.5 py-1 text-xs rounded-lg bg-white border border-gray-200 hover:border-primary-300 hover:bg-primary-50 text-gray-600 hover:text-primary-700 transition-all disabled:opacity-50 touch-manipulation"
+                    className="px-3 py-1.5 text-xs rounded-xl bg-white border border-gray-200 hover:border-blue-400 hover:bg-blue-50 text-gray-700 hover:text-blue-700 transition-all disabled:opacity-50 touch-manipulation shadow-sm hover:shadow-md"
                     style={{ WebkitTapHighlightColor: 'transparent' }}
                   >
                     {q}
@@ -335,7 +387,7 @@ export default function ChatWidget() {
                 ))}
               </div>
             )}
-            <div className="flex gap-2">
+            <div className="flex gap-2.5">
               <input
                 ref={inputRef}
                 type="text"
@@ -348,7 +400,7 @@ export default function ChatWidget() {
                   }
                 }}
                 placeholder="اكتب سؤالك هنا..."
-                className="flex-1 px-4 py-2.5 rounded-xl border-2 border-gray-200 bg-white text-sm focus:ring-2 focus:ring-primary-500/20 focus:border-primary-500 outline-none transition-all"
+                className="flex-1 px-4 py-3 rounded-2xl border-2 border-gray-200 bg-white text-sm focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 outline-none transition-all shadow-sm"
                 disabled={loading}
                 style={{ 
                   fontSize: '16px', // Prevents zoom on iOS
@@ -359,7 +411,15 @@ export default function ChatWidget() {
                 type="button"
                 onClick={() => send()}
                 disabled={loading || !input.trim()}
-                className="p-2.5 rounded-xl bg-gradient-to-r from-primary-600 to-primary-700 text-white hover:from-primary-700 hover:to-primary-800 disabled:opacity-50 disabled:pointer-events-none shadow-sm transition-all"
+                className="p-3 rounded-2xl text-white disabled:opacity-50 disabled:pointer-events-none shadow-lg hover:shadow-xl transition-all hover:scale-105 active:scale-95"
+                style={{
+                  background: loading || !input.trim() 
+                    ? 'linear-gradient(135deg, #9ca3af 0%, #6b7280 100%)'
+                    : 'linear-gradient(135deg, #2563eb 0%, #3b82f6 100%)',
+                  boxShadow: loading || !input.trim() 
+                    ? '0 4px 12px -2px rgba(156, 163, 175, 0.3)'
+                    : '0 4px 16px -4px rgba(37, 99, 235, 0.4)'
+                }}
                 title="إرسال"
               >
                 {loading ? (

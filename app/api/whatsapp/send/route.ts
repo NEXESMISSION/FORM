@@ -8,7 +8,7 @@ import { sendWhatsAppMessage, sendDocumentRejectionWhatsApp, sendDocumentRequest
 export const POST = requireAdmin(async (request: NextRequest, user: any) => {
   try {
     const body = await request.json()
-    const { phone, message, type, documentName, reason, requestedDocuments, customMessage } = body
+    const { phone, message, type, documentName, reason, requestedDocuments, customMessage, userName, applicationId } = body
 
     if (!phone || typeof phone !== 'string') {
       return NextResponse.json(
@@ -23,6 +23,12 @@ export const POST = requireAdmin(async (request: NextRequest, user: any) => {
       result = await sendDocumentRejectionWhatsApp(phone, documentName, reason || '')
     } else if (type === 'document_request' && requestedDocuments && Array.isArray(requestedDocuments)) {
       result = await sendDocumentRequestWhatsApp(phone, requestedDocuments, customMessage)
+    } else if (type === 'application_rejected') {
+      const rejectionMessage = `مرحباً ${userName || 'المستخدم'}،\n\nنأسف لإبلاغك بأن طلب السكن الخاص بك (رقم: ${applicationId?.substring(0, 8) || '—'}) قد تم رفضه.\n\nيمكنك مراجعة تفاصيل الطلب من خلال تطبيق دوموبات.\n\nشكراً لاهتمامك.`
+      result = await sendWhatsAppMessage(phone, rejectionMessage)
+    } else if (type === 'application_approved') {
+      const approvalMessage = `🎉 تهانينا ${userName || 'المستخدم'}!\n\nتم قبول طلب السكن الخاص بك (رقم: ${applicationId?.substring(0, 8) || '—'}).\n\nيمكنك الآن متابعة تقدم مشروعك من خلال تطبيق دوموبات.\n\nنتمنى لك حظاً موفقاً! 🏠`
+      result = await sendWhatsAppMessage(phone, approvalMessage)
     } else if (message) {
       result = await sendWhatsAppMessage(phone, message)
     } else {

@@ -332,13 +332,83 @@ export default function AdminDashboard() {
     toast.success('تم تصدير الملف')
   }
 
-  const updateAppStatus = async (appId: string, status: string) => {
+  const updateAppStatus = async (appId: string, status: string, oldStatus?: string) => {
+    const app = applications.find((a: any) => a.id === appId)
+    if (!app) {
+      toast.error('الطلب غير موجود')
+      return
+    }
+
     const { error } = await supabase
       .from('housing_applications')
       .update({ status })
       .eq('id', appId)
-    if (error) toast.error('فشل تحديث الحالة')
-    else { toast.success('تم تحديث الحالة'); loadData() }
+    
+    if (error) {
+      toast.error('فشل تحديث الحالة')
+      return
+    }
+
+    // Send smart notifications based on status change
+    const phoneNumber = app?.profiles?.phone_number || app?.phone
+    const userName = app?.profiles?.name || app?.first_name || 'المستخدم'
+    
+    try {
+      if (status === 'rejected' && oldStatus !== 'rejected') {
+        // Rejection notification
+        if (phoneNumber) {
+          await fetch('/api/whatsapp/send', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              type: 'application_rejected',
+              phone: phoneNumber,
+              userName: userName,
+              applicationId: appId,
+            }),
+          })
+        }
+        toast.success('تم رفض الطلب وإرسال إشعار للمستخدم')
+      } else if (status === 'approved' && oldStatus !== 'approved') {
+        // Approval notification
+        if (phoneNumber) {
+          await fetch('/api/whatsapp/send', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              type: 'application_approved',
+              phone: phoneNumber,
+              userName: userName,
+              applicationId: appId,
+            }),
+          })
+        }
+        toast.success('تم قبول الطلب وإرسال إشعار للمستخدم')
+      } else if (status === 'documents_requested' && oldStatus !== 'documents_requested') {
+        // Documents requested notification
+        const message = app?.documents_requested_message || ''
+        if (phoneNumber && message) {
+          await fetch('/api/whatsapp/send', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              type: 'document_request',
+              phone: phoneNumber,
+              userName: userName,
+              customMessage: message,
+            }),
+          })
+        }
+        toast.success('تم طلب المستندات وإرسال إشعار للمستخدم')
+      } else {
+        toast.success('تم تحديث الحالة')
+      }
+    } catch (error) {
+      console.error('Error sending notification:', error)
+      toast.success('تم تحديث الحالة (فشل إرسال الإشعار)')
+    }
+    
+    loadData()
   }
 
   if (loading) {
@@ -540,7 +610,7 @@ export default function AdminDashboard() {
                           </button>
                           <select
                             value={app.status}
-                            onChange={(e) => updateAppStatus(app.id, e.target.value)}
+                            onChange={(e) => updateAppStatus(app.id, e.target.value, app.status)}
                             className="input text-sm py-2 w-32"
                           >
                             {Object.entries(APP_STATUS_LABELS).map(([val, label]) => (
@@ -625,7 +695,7 @@ export default function AdminDashboard() {
                     </button>
                     <select
                       value={app.status}
-                      onChange={(e) => updateAppStatus(app.id, e.target.value)}
+                      onChange={(e) => updateAppStatus(app.id, e.target.value, app.status)}
                       className="input text-sm py-2 flex-1 min-w-0"
                     >
                       {Object.entries(APP_STATUS_LABELS).map(([val, label]) => (
