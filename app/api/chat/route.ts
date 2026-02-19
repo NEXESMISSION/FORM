@@ -3,6 +3,10 @@ import { apiRateLimit } from '@/lib/security/rateLimiting'
 import { sanitizeInput } from '@/lib/security/sanitization'
 import { detectIntent, CHAT_KNOWLEDGE_BASE } from '@/lib/utils/chatContext'
 
+// Ensure this route is handled at runtime
+export const runtime = 'nodejs'
+export const dynamic = 'force-dynamic'
+
 const SYSTEM_PROMPT = `أنت مساعد ذكي وودود لخدمة DOMOBAT (دوموبات) — برنامج السكن الاقتصادي السريع في تونس.
 
 🎯 مهمتك: الإجابة على أسئلة المستخدمين بطريقة طبيعية وودودة ومفيدة بالعربية فقط. لا تكن روبوتياً - كن كصديق يساعد.
@@ -211,4 +215,13 @@ export const POST = async (request: NextRequest) => {
       { status: 500 }
     )
   }
+}
+
+// Health check endpoint
+export const GET = async () => {
+  return NextResponse.json({ 
+    status: 'ok', 
+    message: 'Chat API is running',
+    hasApiKey: !!process.env.OPENAI_API_KEY 
+  })
 }

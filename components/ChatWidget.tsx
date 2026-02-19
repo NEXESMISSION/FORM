@@ -111,14 +111,35 @@ export default function ChatWidget() {
           messages: [...messages, userMessage].map((m) => ({ role: m.role, content: m.content })),
         }),
       })
-      const data = await res.json()
+      
       if (!res.ok) {
-        setError(data.error || 'فشل الإرسال')
+        // Handle different error statuses
+        if (res.status === 404) {
+          setError('خدمة الدردشة غير متاحة حالياً. يرجى المحاولة لاحقاً.')
+        } else if (res.status === 503) {
+          const data = await res.json().catch(() => ({}))
+          setError(data.error || 'خدمة الدردشة غير مفعّلة. يرجى التواصل مع الدعم الفني.')
+        } else {
+          const data = await res.json().catch(() => ({}))
+          setError(data.error || 'فشل الإرسال. يرجى المحاولة مرة أخرى.')
+        }
         return
       }
+      
+      const data = await res.json()
+      if (data.error) {
+        setError(data.error)
+        return
+      }
+      
       setMessages((prev) => [...prev, { role: 'assistant', content: data.message || '', timestamp: new Date() }])
-    } catch {
-      setError('حدث خطأ. جرّب لاحقاً.')
+    } catch (err: any) {
+      console.error('Chat error:', err)
+      if (err.message?.includes('Failed to fetch') || err.message?.includes('404')) {
+        setError('خدمة الدردشة غير متاحة حالياً. يرجى المحاولة لاحقاً.')
+      } else {
+        setError('حدث خطأ. جرّب لاحقاً.')
+      }
     } finally {
       setLoading(false)
     }
