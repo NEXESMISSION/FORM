@@ -236,7 +236,7 @@ export default function HousingApplicationForm() {
         marital_status: (formData.marital_status && maritalMap[formData.marital_status]) ? maritalMap[formData.marital_status] : 'single',
         number_of_children: formData.family_count ?? 0,
         net_monthly_income: formData.net_monthly_income ?? null,
-        monthly_obligations: formData.total_monthly_obligations ?? null,
+        total_monthly_obligations: formData.total_monthly_obligations ?? null,
         governorate: formData.current_address || '',
         desired_housing_type: 'apartment' as const,
         maximum_budget: formData.max_monthly_payment ?? null,
