@@ -126,7 +126,7 @@ export function createAppError(
  */
 export function getErrorMessage(error: unknown): string {
   if (error instanceof AppError) {
-    return ErrorMessages[error.code] || error.message
+    return ErrorMessages[error.code as keyof typeof ErrorMessages] || error.message
   }
 
   if (error instanceof Error) {

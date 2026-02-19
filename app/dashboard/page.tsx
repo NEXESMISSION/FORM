@@ -107,7 +107,7 @@ export default function DashboardPage() {
           return
         }
 
-        const msg = (createError.message || '').toLowerCase()
+        const msg = (createError?.message || '').toLowerCase()
         const isDuplicatePhone = msg.includes('phone_number') || msg.includes('profiles_phone_number')
 
         if (isDuplicatePhone) {

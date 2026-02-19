@@ -308,6 +308,24 @@ export default function HousingApplicationDetailPage() {
   const rejectedInfoAlert = alerts.find((a) => a.type === 'rejected_info')
   const adminRequestAlert = alerts.find((a) => a.type === 'admin_request')
 
+  // Compute rejected slots and slots with rejected docs
+  const rejectedSlots = docSlots.filter(slot => {
+    const docs = getDocsForSlotHelper(slot.label)
+    return docs.some((d: any) => d.status === 'rejected') && !docs.some((d: any) => d.status === 'accepted')
+  })
+  
+  const slotsWithRejectedDocs = docSlots.filter(slot => {
+    const docs = getDocsForSlotHelper(slot.label)
+    return docs.some((d: any) => d.status === 'rejected') && docs.some((d: any) => d.status === 'accepted')
+  })
+  
+  const missingSlots = docSlots.filter(slot => {
+    const docs = getDocsForSlotHelper(slot.label)
+    return docs.length === 0 || !docs.some((d: any) => d.status === 'accepted')
+  })
+  
+  const hasMissing = missingAlert !== undefined
+
   return (
     <div className="min-h-screen bg-surface flex flex-col pb-28">
       <header className="sticky top-0 z-10 bg-white/95 backdrop-blur border-b border-gray-100">
@@ -321,7 +339,7 @@ export default function HousingApplicationDetailPage() {
               rejectedSlots.length > 0 
                 ? 'bg-red-100 text-red-700' 
                 : slotsWithRejectedDocs.length > 0 && slotsWithRejectedDocs.some(s => {
-                    const docs = getDocsForSlot(s.label)
+                    const docs = getDocsForSlotHelper(s.label)
                     return docs.some((d: any) => d.status === 'accepted')
                   })
                 ? 'bg-amber-100 text-amber-700'
@@ -431,7 +449,7 @@ export default function HousingApplicationDetailPage() {
             rejectedSlots.length > 0 
               ? 'border-red-300 bg-red-50' 
               : slotsWithRejectedDocs.length > 0 && slotsWithRejectedDocs.some(s => {
-                  const docs = getDocsForSlot(s.label)
+                  const docs = getDocsForSlotHelper(s.label)
                   return docs.some((d: any) => d.status === 'accepted')
                 })
                 ? 'border-amber-300 bg-amber-50'
@@ -444,7 +462,7 @@ export default function HousingApplicationDetailPage() {
                 rejectedSlots.length > 0 
                   ? 'bg-red-500' 
                   : slotsWithRejectedDocs.length > 0 && slotsWithRejectedDocs.some(s => {
-                      const docs = getDocsForSlot(s.label)
+                      const docs = getDocsForSlotHelper(s.label)
                       return docs.some((d: any) => d.status === 'accepted')
                     })
                   ? 'bg-amber-500'
@@ -459,7 +477,7 @@ export default function HousingApplicationDetailPage() {
                   rejectedSlots.length > 0 
                     ? 'text-red-900' 
                     : slotsWithRejectedDocs.length > 0 && slotsWithRejectedDocs.some(s => {
-                        const docs = getDocsForSlot(s.label)
+                        const docs = getDocsForSlotHelper(s.label)
                         return docs.some((d: any) => d.status === 'accepted')
                       })
                     ? 'text-amber-900'
@@ -470,7 +488,7 @@ export default function HousingApplicationDetailPage() {
                   {rejectedSlots.length > 0 
                     ? 'مستندات مرفوضة — يرجى استبدالها' 
                     : slotsWithRejectedDocs.length > 0 && slotsWithRejectedDocs.some(s => {
-                        const docs = getDocsForSlot(s.label)
+                        const docs = getDocsForSlotHelper(s.label)
                         return docs.some((d: any) => d.status === 'accepted')
                       })
                     ? 'تنبيه: مستندات مرفوضة'
@@ -485,7 +503,7 @@ export default function HousingApplicationDetailPage() {
                       <div className="flex-1">
                         <ul className="space-y-1.5 text-red-800">
                           {rejectedSlots.map((s) => {
-                            const docs = getDocsForSlot(s.label)
+                            const docs = getDocsForSlotHelper(s.label)
                             const rejectedDoc = docs.find((d: any) => d.status === 'rejected')
                             return (
                               <li key={s.label} className="flex items-start gap-2">
@@ -504,7 +522,7 @@ export default function HousingApplicationDetailPage() {
                     </li>
                   )}
                   {slotsWithRejectedDocs.length > 0 && slotsWithRejectedDocs.some(s => {
-                    const docs = getDocsForSlot(s.label)
+                    const docs = getDocsForSlotHelper(s.label)
                     const hasAccepted = docs.some((d: any) => d.status === 'accepted')
                     return hasAccepted // Only show if there's an accepted doc alongside rejected
                   }) && (
@@ -515,11 +533,11 @@ export default function HousingApplicationDetailPage() {
                         <ul className="space-y-1.5 text-amber-800">
                           {slotsWithRejectedDocs
                             .filter(s => {
-                              const docs = getDocsForSlot(s.label)
+                              const docs = getDocsForSlotHelper(s.label)
                               return docs.some((d: any) => d.status === 'accepted') && docs.some((d: any) => d.status === 'rejected')
                             })
                             .map((s) => {
-                              const docs = getDocsForSlot(s.label)
+                              const docs = getDocsForSlotHelper(s.label)
                               const rejectedDocs = docs.filter((d: any) => d.status === 'rejected')
                               return (
                                 <li key={s.label} className="flex items-start gap-2">
@@ -594,7 +612,7 @@ export default function HousingApplicationDetailPage() {
           ) : (
             <ul className="space-y-3">
               {docSlots.map((slot, slotIdx) => {
-                const docs = getDocsForSlot(slot.label)
+                const docs = getDocsForSlotHelper(slot.label)
                 const pending = pendingByDocType[slot.label]
                 const uploading = uploadingForDocType === slot.label
                 
@@ -667,9 +685,9 @@ export default function HousingApplicationDetailPage() {
                         {hasRejected && hasPendingReview && !hasAccepted && docs.find((d: any) => d.status === 'rejected')?.rejectionReason && (
                           <p className="text-xs text-gray-500 mt-1">سبب الرفض السابق: {docs.find((d: any) => d.status === 'rejected')?.rejectionReason}</p>
                         )}
-                        {getDocsForSlot(slot.label).length > 0 && (
+                        {getDocsForSlotHelper(slot.label).length > 0 && (
                           <ul className="mt-2 space-y-1.5">
-                            {getDocsForSlot(slot.label).map((d: any) => (
+                            {getDocsForSlotHelper(slot.label).map((d: any) => (
                               <li key={d.id} className="flex flex-col gap-0.5">
                                 <button type="button" onClick={() => setPreviewDoc({ url: d.url, fileName: d.fileName })} className="text-xs text-left hover:underline flex items-center gap-1 text-primary-600">
                                   <ExternalLink className="w-3 h-3 shrink-0" />

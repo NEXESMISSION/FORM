@@ -215,23 +215,25 @@ function ApplicantDashboardContent() {
   /** Only returns slots where ALL documents are rejected (no pending/accepted documents exist) */
   const getRejectedDocLabelsForApp = (app: any): Array<{ label: string; reason?: string }> => {
     const slots = getDocSlotsForApp(app)
-    return slots
-      .map((slot) => {
-        const docs = getDocsForSlot(app, slot.label)
-        if (docs.length === 0) return null // No docs = missing, not rejected
-        
-        // Check if there are any non-rejected documents
-        const hasNonRejected = docs.some((d: any) => d.status !== 'rejected' && (d.status === 'pending_review' || d.status === 'accepted' || !d.status))
-        
-        // Only return as rejected if ALL documents are rejected
-        if (hasNonRejected) return null
-        
-        const rejectedDoc = docs.find((d: any) => d.status === 'rejected')
-        if (rejectedDoc) {
-          return { label: slot.label, reason: rejectedDoc.rejectionReason }
-        }
-        return null
-      })
+    const result: Array<{ label: string; reason?: string }> = []
+    
+    for (const slot of slots) {
+      const docs = getDocsForSlot(app, slot.label)
+      if (docs.length === 0) continue // No docs = missing, not rejected
+      
+      // Check if there are any non-rejected documents
+      const hasNonRejected = docs.some((d: any) => d.status !== 'rejected' && (d.status === 'pending_review' || d.status === 'accepted' || !d.status))
+      
+      // Only return as rejected if ALL documents are rejected
+      if (hasNonRejected) continue
+      
+      const rejectedDoc = docs.find((d: any) => d.status === 'rejected')
+      if (rejectedDoc) {
+        result.push({ label: slot.label, reason: rejectedDoc.rejectionReason })
+      }
+    }
+    
+    return result
       .filter((item): item is { label: string; reason?: string } => item !== null)
   }
 
@@ -748,7 +750,7 @@ function ApplicantDashboardContent() {
                                     <div className="text-blue-800">
                                       <p className="font-semibold mb-1">طلب من الإدارة:</p>
                                       <div className="space-y-1">
-                                        {adminMessage.split('\n').map((line, idx) => {
+                                        {adminMessage.split('\n').map((line: string, idx: number) => {
                                           const trimmed = line.trim()
                                           if (trimmed.startsWith('المطلوب') || trimmed === 'المطلوب:') {
                                             return null
@@ -788,12 +790,12 @@ function ApplicantDashboardContent() {
                         <p className="text-sm text-gray-700 mb-4 whitespace-pre-wrap line-clamp-2">{app.documents_requested_message}</p>
                         {uploadingForId === app.id ? (
                           <div className="space-y-3">
-                            {pendingListFiles?.appId === app.id && pendingListFiles.files.length > 0 ? (
+                            {pendingListFiles?.appId === app.id && (pendingListFiles?.files?.length ?? 0) > 0 ? (
                               <>
                                 <div className="bg-white rounded-xl border border-gray-200 p-3">
                                   <p className="text-xs font-semibold text-gray-700 mb-2">الملفات المحددة:</p>
                                   <ul className="space-y-1.5 max-h-24 overflow-y-auto">
-                                    {pendingListFiles.files.map((f, i) => (
+                                    {pendingListFiles?.files?.map((f, i) => (
                                       <li key={i} className="flex items-center gap-2 text-xs text-gray-600">
                                         <FileText className="w-3.5 h-3.5 shrink-0 text-primary-600" />
                                         <span className="truncate flex-1">{f.name}</span>
@@ -823,7 +825,7 @@ function ApplicantDashboardContent() {
                                     ) : (
                                       <>
                                         <span>حفظ ورفع</span>
-                                        <span className="bg-white/20 px-1.5 py-0.5 rounded text-xs">({pendingListFiles.files.length})</span>
+                                        <span className="bg-white/20 px-1.5 py-0.5 rounded text-xs">({pendingListFiles?.files.length})</span>
                                       </>
                                     )}
                                   </button>
@@ -846,7 +848,7 @@ function ApplicantDashboardContent() {
                                     if (!e.target.files?.length) return
                                     setPendingListFiles((prev) => ({
                                       appId: app.id,
-                                      files: [...(prev?.appId === app.id ? prev.files : []), ...Array.from(e.target.files!)],
+                                      files: [...(prev && prev.appId === app.id ? (prev.files ?? []) : []), ...Array.from(e.target.files!)],
                                     }))
                                     e.target.value = ''
                                   }}

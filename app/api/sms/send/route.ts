@@ -192,7 +192,7 @@ export const POST = requireAuth(async (request: NextRequest, user: any) => {
       { status: 500 }
     )
   }
-}
+})
 
 // Verify code endpoint
 export const PUT = requireAuth(async (request: NextRequest, user: any) => {
