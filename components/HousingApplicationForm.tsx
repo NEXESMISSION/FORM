@@ -121,6 +121,9 @@ export default function HousingApplicationForm() {
   const recordingTimerRef = useRef<NodeJS.Timeout | null>(null)
   const audioRef = useRef<HTMLAudioElement | null>(null)
   const recordingStreamRef = useRef<MediaStream | null>(null)
+  
+  // Refs for form fields to focus on validation errors
+  const fieldRefs = useRef<Record<string, HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement | HTMLElement | null>>({})
 
   // Load draft from localStorage on mount
   useEffect(() => {
@@ -191,6 +194,154 @@ export default function HousingApplicationForm() {
     setFormData(prev => ({ ...prev, [field]: value }))
   }
 
+  // Comprehensive validation function
+  const validateForm = (): { isValid: boolean; section: number; field: string; message: string } => {
+    // Section 1: المعطيات الشخصية
+    if (!(formData.full_name || '').trim()) {
+      return { isValid: false, section: 1, field: 'full_name', message: 'يرجى إدخال الاسم واللقب' }
+    }
+    if (!(formData.current_address || '').trim()) {
+      return { isValid: false, section: 1, field: 'current_address', message: 'يرجى اختيار الولاية' }
+    }
+    if (!(formData.national_id || '').trim()) {
+      return { isValid: false, section: 1, field: 'national_id', message: 'يرجى إدخال رقم بطاقة التعريف الوطنية' }
+    }
+    if (!formData.date_of_birth) {
+      return { isValid: false, section: 1, field: 'date_of_birth', message: 'يرجى إدخال تاريخ الولادة' }
+    }
+    if (!formData.marital_status) {
+      return { isValid: false, section: 1, field: 'marital_status', message: 'يرجى اختيار الحالة الاجتماعية' }
+    }
+    if (formData.family_count === undefined || formData.family_count === null) {
+      return { isValid: false, section: 1, field: 'family_count', message: 'يرجى إدخال عدد أفراد العائلة' }
+    }
+    if (!(formData.phone || '').trim()) {
+      return { isValid: false, section: 1, field: 'phone', message: 'يرجى إدخال رقم الهاتف' }
+    }
+    // Email validation - check if we have email in form or will get from auth
+    // We'll validate this in handleSubmit since we need user object
+
+    // Section 2: الوضعية المهنية
+    if (!formData.employment_status) {
+      return { isValid: false, section: 2, field: 'employment_status', message: 'يرجى اختيار الوضعية المهنية' }
+    }
+    if (!formData.work_sector) {
+      return { isValid: false, section: 2, field: 'work_sector', message: 'يرجى اختيار قطاع العمل' }
+    }
+    if (formData.net_monthly_income === undefined || formData.net_monthly_income === null) {
+      return { isValid: false, section: 2, field: 'net_monthly_income', message: 'يرجى إدخال الدخل الشهري الصافي' }
+    }
+    if (!formData.income_stable) {
+      return { isValid: false, section: 2, field: 'income_stable', message: 'يرجى الإجابة عن سؤال استقرار الدخل' }
+    }
+
+    // Section 3: الوضعية المالية
+    if (!formData.has_financial_obligations) {
+      return { isValid: false, section: 3, field: 'has_financial_obligations', message: 'يرجى الإجابة عن سؤال الالتزامات المالية' }
+    }
+    // Only require total_monthly_obligations if user has obligations
+    if (formData.has_financial_obligations === 'نعم') {
+      if (formData.total_monthly_obligations === undefined || formData.total_monthly_obligations === null || formData.total_monthly_obligations < 0) {
+        return { isValid: false, section: 3, field: 'total_monthly_obligations', message: 'يرجى إدخال قيمة الالتزامات الشهرية' }
+      }
+    }
+    if (formData.max_monthly_payment === undefined || formData.max_monthly_payment === null) {
+      return { isValid: false, section: 3, field: 'max_monthly_payment', message: 'يرجى إدخال القدرة القصوى على الدفع الشهري' }
+    }
+    if (!formData.can_save_20_percent) {
+      return { isValid: false, section: 3, field: 'can_save_20_percent', message: 'يرجى الإجابة عن سؤال التسبقة' }
+    }
+
+    // Section 4: الوضعية السكنية الحالية
+    if (!formData.current_housing_type) {
+      return { isValid: false, section: 4, field: 'current_housing_type', message: 'يرجى اختيار نوع السكن الحالي' }
+    }
+
+    // Section 5: العقار
+    if (!formData.owns_land) {
+      return { isValid: false, section: 5, field: 'owns_land', message: 'يرجى الإجابة عن سؤال ملكية الأرض' }
+    }
+    if (formData.owns_land === 'نعم') {
+      if (!(formData.land_location || '').trim()) {
+        return { isValid: false, section: 5, field: 'land_location', message: 'يرجى إدخال موقع الأرض' }
+      }
+      if (formData.land_area_sqm === undefined || formData.land_area_sqm === null) {
+        return { isValid: false, section: 5, field: 'land_area_sqm', message: 'يرجى إدخال مساحة الأرض' }
+      }
+      if (!formData.land_nature) {
+        return { isValid: false, section: 5, field: 'land_nature', message: 'يرجى اختيار طبيعة الأرض' }
+      }
+      if (!formData.land_ownership_type) {
+        return { isValid: false, section: 5, field: 'land_ownership_type', message: 'يرجى اختيار نوع الملكية' }
+      }
+    }
+
+    // Section 6: نموذج السكن المطلوب
+    if (!formData.housing_type_model) {
+      return { isValid: false, section: 6, field: 'housing_type_model', message: 'يرجى اختيار نوع السكن' }
+    }
+    if (!formData.housing_individual_collective) {
+      return { isValid: false, section: 6, field: 'housing_individual_collective', message: 'يرجى اختيار النوع (فردي/جماعي)' }
+    }
+    if (!formData.housing_area && !formData.housing_model) {
+      return { isValid: false, section: 6, field: 'housing_area', message: 'يرجى اختيار المساحة الجملية المرغوبة' }
+    }
+    if (formData.housing_area === 'custom' && (formData.housing_area_custom === undefined || formData.housing_area_custom === null)) {
+      return { isValid: false, section: 6, field: 'housing_area_custom', message: 'يرجى إدخال المساحة المخصصة' }
+    }
+
+    // Section 7: مدة التقسيط
+    if (!formData.payment_type) {
+      return { isValid: false, section: 7, field: 'payment_type', message: 'يرجى اختيار نوع الدفع' }
+    }
+    if (formData.payment_type === 'تقسيط' && !formData.installment_period) {
+      return { isValid: false, section: 7, field: 'installment_period', message: 'يرجى اختيار مدة التقسيط' }
+    }
+
+    return { isValid: true, section: 0, field: '', message: '' }
+  }
+
+  const focusField = (fieldName: string, section: number) => {
+    // Navigate to the section first
+    setCurrentSection(section)
+    
+    // Scroll to top and then focus the field
+    setTimeout(() => {
+      formTopRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+      
+      // Focus the field after a short delay to ensure it's rendered
+      setTimeout(() => {
+        const fieldElement = fieldRefs.current[fieldName]
+        if (!fieldElement) return
+        
+        // For input/select/textarea elements, focus them
+        if (fieldElement instanceof HTMLInputElement || fieldElement instanceof HTMLSelectElement || fieldElement instanceof HTMLTextAreaElement) {
+          fieldElement.focus()
+          fieldElement.scrollIntoView({ behavior: 'smooth', block: 'center' })
+          // Add a visual highlight
+          fieldElement.style.borderColor = '#ef4444'
+          fieldElement.style.boxShadow = '0 0 0 3px rgba(239, 68, 68, 0.1)'
+          setTimeout(() => {
+            fieldElement.style.borderColor = ''
+            fieldElement.style.boxShadow = ''
+          }, 3000)
+        } else {
+          // For div elements (radio button groups), just scroll to them
+          fieldElement.scrollIntoView({ behavior: 'smooth', block: 'center' })
+          // Add a visual highlight to the container
+          const originalBorder = fieldElement.style.border
+          const originalBoxShadow = fieldElement.style.boxShadow
+          fieldElement.style.border = '2px solid #ef4444'
+          fieldElement.style.boxShadow = '0 0 0 3px rgba(239, 68, 68, 0.1)'
+          setTimeout(() => {
+            fieldElement.style.border = originalBorder
+            fieldElement.style.boxShadow = originalBoxShadow
+          }, 3000)
+        }
+      }, 300)
+    }, 100)
+  }
+
   const handleSubmit = async () => {
     const { data: { user } } = await supabase.auth.getUser()
     if (!user) {
@@ -199,13 +350,11 @@ export default function HousingApplicationForm() {
       return
     }
 
-    // تحقق مبدئي من القسم 1: إرشاد المستخدم لموقع الخطأ
-    const needName = !(formData.full_name || '').trim()
-    const needGov = !(formData.current_address || '').trim()
-    if (needName || needGov) {
-      setCurrentSection(1)
-      setTimeout(() => formTopRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' }), 100)
-      toast.error(needName ? 'يرجى إدخال الاسم واللقب' : 'يرجى اختيار الولاية')
+    // Comprehensive validation
+    const validation = validateForm()
+    if (!validation.isValid) {
+      focusField(validation.field, validation.section)
+      toast.error(validation.message)
       return
     }
 
@@ -225,6 +374,15 @@ export default function HousingApplicationForm() {
         requiredArea = parseInt(formData.housing_model, 10)
       }
 
+      // Get user email from auth if not provided in form
+      const userEmail = formData.email?.trim() || user.email || ''
+      if (!userEmail) {
+        toast.error('يرجى إدخال البريد الإلكتروني')
+        focusField('email', 1)
+        setLoading(false)
+        return
+      }
+
       const payload: any = {
         user_id: user.id,
         status: 'in_progress',
@@ -232,28 +390,81 @@ export default function HousingApplicationForm() {
         last_name: last || '—',
         national_id: formData.national_id || '',
         date_of_birth: formData.date_of_birth || new Date().toISOString().slice(0, 10),
-        email: formData.email || '',
+        email: userEmail,
+        phone: formData.phone || null,
         marital_status: (formData.marital_status && maritalMap[formData.marital_status]) ? maritalMap[formData.marital_status] : 'single',
         number_of_children: formData.family_count ?? 0,
+        family_count: formData.family_count ?? 0,
+        children_ages: formData.children_ages || null,
+        current_address: formData.current_address || '', // Required field
+        governorate: formData.current_address || '', // Also set governorate for compatibility
         net_monthly_income: formData.net_monthly_income ?? null,
-        total_monthly_obligations: formData.total_monthly_obligations ?? null,
-        governorate: formData.current_address || '',
+        // Set total_monthly_obligations to 0 if user has no obligations, null otherwise
+        total_monthly_obligations: formData.has_financial_obligations === 'لا' 
+          ? 0 
+          : (formData.total_monthly_obligations ?? null),
         desired_housing_type: 'apartment' as const,
         maximum_budget: formData.max_monthly_payment ?? null,
         required_area: requiredArea,
-        // New fields
+        // Section 2 fields
+        employment_status: formData.employment_status || null,
+        work_sector: formData.work_sector || null,
         skills: formData.skills || null,
+        income_stable: formData.income_stable || null,
+        extra_income: formData.extra_income || null,
+        // Section 3 fields
+        has_financial_obligations: formData.has_financial_obligations || null,
+        max_monthly_payment: formData.max_monthly_payment ?? null,
+        can_save_20_percent: formData.can_save_20_percent || null,
+        down_payment_value: formData.down_payment_value ?? null,
+        // Section 4 fields
+        current_housing_type: formData.current_housing_type || null,
+        current_residence_duration: formData.current_residence_duration || null,
+        current_rent_value: formData.current_rent_value ?? null,
+        housing_problems: formData.housing_problems || [],
+        // Section 5 fields
+        owns_land: formData.owns_land || null,
+        land_location: formData.land_location || null,
+        land_address_gps: formData.land_address_gps || null,
+        land_area_sqm: formData.land_area_sqm ?? null,
+        land_nature: formData.land_nature || null,
+        land_ownership_type: formData.land_ownership_type || null,
+        land_registered: formData.land_registered || null,
+        has_ownership_doc: formData.has_ownership_doc || null,
+        has_building_permit: formData.has_building_permit || null,
+        company_handle_permit: formData.company_handle_permit || null,
+        land_legal_issues: formData.land_legal_issues || null,
+        desired_housing_type_land: formData.desired_housing_type_land || null,
+        custom_design_or_ready: formData.custom_design_or_ready || null,
+        rooms_count_land: formData.rooms_count_land ?? null,
+        want_future_floor: formData.want_future_floor || null,
+        service_type: formData.service_type || null,
+        pay_down_direct: formData.pay_down_direct || null,
+        want_installment_building_only: formData.want_installment_building_only || null,
+        installment_years_land: formData.installment_years_land || null,
+        company_provide_full_property: formData.company_provide_full_property || null,
+        // Section 6 fields
         housing_type_model: formData.housing_type_model || null,
         housing_individual_collective: formData.housing_individual_collective || null,
         housing_area: formData.housing_area || null,
-        housing_area_custom: formData.housing_area_custom || null,
+        housing_area_custom: formData.housing_area_custom ?? null,
+        housing_model: formData.housing_model || null,
+        accept_area_adjustment: formData.accept_area_adjustment || null,
         desired_total_area: formData.desired_total_area || null,
         number_of_rooms: formData.number_of_rooms || null,
         additional_components: formData.additional_components || [],
         housing_purpose: formData.housing_purpose || null,
+        // Section 7 fields
         payment_type: formData.payment_type || null,
-        payment_percentage: formData.payment_percentage || null,
+        payment_percentage: formData.payment_percentage ?? null,
         installment_period: formData.installment_period || null,
+        // Section 8 fields
+        agree_state_referral: formData.agree_state_referral || null,
+        previous_social_housing: formData.previous_social_housing || null,
+        registered_social_affairs: formData.registered_social_affairs || null,
+        accept_social_economic_housing: formData.accept_social_economic_housing || null,
+        accept_followup_via_platform: formData.accept_followup_via_platform || null,
+        // Section 9 fields
         additional_info: formData.additional_info || null,
         additional_info_type: formData.additional_info_type || null,
         additional_info_voice_url: formData.additional_info_voice_url || null,
@@ -267,9 +478,53 @@ export default function HousingApplicationForm() {
 
       if (error) {
         console.error('Application submission error:', error)
-        setCurrentSection(1)
-        setTimeout(() => formTopRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' }), 100)
-        throw error
+        
+        // Parse error to find which field is missing
+        let errorMessage = 'فشل إرسال الطلب'
+        let errorSection = 1
+        let errorField = ''
+        
+        if (error.message) {
+          // Check for common database constraint errors
+          if (error.message.includes('current_address') || error.message.includes('governorate')) {
+            errorMessage = 'يرجى اختيار الولاية'
+            errorSection = 1
+            errorField = 'current_address'
+          } else if (error.message.includes('email')) {
+            errorMessage = 'يرجى إدخال البريد الإلكتروني'
+            errorSection = 1
+            errorField = 'email'
+          } else if (error.message.includes('total_monthly_obligations') || error.message.includes('monthly_obligations')) {
+            errorMessage = 'يرجى إدخال قيمة الالتزامات الشهرية'
+            errorSection = 3
+            errorField = 'total_monthly_obligations'
+          } else if (error.message.includes('first_name') || error.message.includes('last_name')) {
+            errorMessage = 'يرجى إدخال الاسم واللقب'
+            errorSection = 1
+            errorField = 'full_name'
+          } else if (error.message.includes('national_id')) {
+            errorMessage = 'يرجى إدخال رقم بطاقة التعريف الوطنية'
+            errorSection = 1
+            errorField = 'national_id'
+          } else if (error.message.includes('date_of_birth')) {
+            errorMessage = 'يرجى إدخال تاريخ الولادة'
+            errorSection = 1
+            errorField = 'date_of_birth'
+          } else {
+            errorMessage = error.message || 'فشل إرسال الطلب'
+          }
+        }
+        
+        // Focus on the error field instead of resetting to section 1
+        if (errorField) {
+          focusField(errorField, errorSection)
+        } else {
+          formTopRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+        }
+        
+        toast.error(errorMessage)
+        setLoading(false)
+        return
       }
 
       if (inserted?.id) {
@@ -286,9 +541,10 @@ export default function HousingApplicationForm() {
       toast.success('تم إرسال الطلب بنجاح')
       router.replace('/dashboard/applicant')
     } catch (error: any) {
-      const msg = error.message || 'فشل إرسال الطلب'
-      toast.error(msg)
-    } finally {
+      // Error handling is done in the if (error) block above
+      // This catch is for unexpected errors
+      console.error('Unexpected error:', error)
+      toast.error('حدث خطأ غير متوقع. يرجى المحاولة مرة أخرى.')
       setLoading(false)
     }
   }
@@ -355,19 +611,42 @@ export default function HousingApplicationForm() {
             <div className="space-y-4">
               <div>
                 <label className="form-label">الاسم واللقب</label>
-                <input type="text" value={formData.full_name || ''} onChange={(e) => updateFormData('full_name', e.target.value)} className="form-input" />
+                <input 
+                  ref={(el) => { fieldRefs.current['full_name'] = el }}
+                  type="text" 
+                  value={formData.full_name || ''} 
+                  onChange={(e) => updateFormData('full_name', e.target.value)} 
+                  className="form-input" 
+                />
               </div>
               <div>
                 <label className="form-label">رقم بطاقة التعريف الوطنية</label>
-                <input type="text" value={formData.national_id || ''} onChange={(e) => updateFormData('national_id', e.target.value)} className="form-input" />
+                <input 
+                  ref={(el) => { fieldRefs.current['national_id'] = el }}
+                  type="text" 
+                  value={formData.national_id || ''} 
+                  onChange={(e) => updateFormData('national_id', e.target.value)} 
+                  className="form-input" 
+                />
               </div>
               <div>
                 <label className="form-label">تاريخ الولادة</label>
-                <input type="date" value={formData.date_of_birth || ''} onChange={(e) => updateFormData('date_of_birth', e.target.value)} className="form-input" />
+                <input 
+                  ref={(el) => { fieldRefs.current['date_of_birth'] = el }}
+                  type="date" 
+                  value={formData.date_of_birth || ''} 
+                  onChange={(e) => updateFormData('date_of_birth', e.target.value)} 
+                  className="form-input" 
+                />
               </div>
               <div>
                 <label className="form-label">الحالة الاجتماعية</label>
-                <select value={formData.marital_status || ''} onChange={(e) => updateFormData('marital_status', e.target.value)} className="form-input">
+                <select 
+                  ref={(el) => { fieldRefs.current['marital_status'] = el }}
+                  value={formData.marital_status || ''} 
+                  onChange={(e) => updateFormData('marital_status', e.target.value)} 
+                  className="form-input"
+                >
                   <option value="">اختر...</option>
                   <option value="أعزب">أعزب</option>
                   <option value="متزوج">متزوج</option>
@@ -377,7 +656,14 @@ export default function HousingApplicationForm() {
               </div>
               <div>
                 <label className="form-label">عدد أفراد العائلة</label>
-                <input type="number" min={0} value={formData.family_count ?? ''} onChange={(e) => updateFormData('family_count', e.target.value === '' ? undefined : parseInt(e.target.value, 10))} className="form-input" />
+                <input 
+                  ref={(el) => { fieldRefs.current['family_count'] = el }}
+                  type="number" 
+                  min={0} 
+                  value={formData.family_count ?? ''} 
+                  onChange={(e) => updateFormData('family_count', e.target.value === '' ? undefined : parseInt(e.target.value, 10))} 
+                  className="form-input" 
+                />
               </div>
               <div>
                 <label className="form-label">أعمار الأطفال (إن وجدوا)</label>
@@ -385,15 +671,32 @@ export default function HousingApplicationForm() {
               </div>
               <div>
                 <label className="form-label">رقم الهاتف</label>
-                <input type="tel" value={formData.phone || ''} onChange={(e) => updateFormData('phone', e.target.value)} className="form-input" />
+                <input 
+                  ref={(el) => { fieldRefs.current['phone'] = el }}
+                  type="tel" 
+                  value={formData.phone || ''} 
+                  onChange={(e) => updateFormData('phone', e.target.value)} 
+                  className="form-input" 
+                />
               </div>
               <div>
                 <label className="form-label">البريد الإلكتروني (اختياري)</label>
-                <input type="email" value={formData.email || ''} onChange={(e) => updateFormData('email', e.target.value)} className="form-input" />
+                <input 
+                  ref={(el) => { fieldRefs.current['email'] = el }}
+                  type="email" 
+                  value={formData.email || ''} 
+                  onChange={(e) => updateFormData('email', e.target.value)} 
+                  className="form-input" 
+                />
               </div>
               <div>
                 <label className="form-label">العنوان الحالي (ولاية)</label>
-                <select value={formData.current_address || ''} onChange={(e) => updateFormData('current_address', e.target.value)} className="form-input">
+                <select 
+                  ref={(el) => { fieldRefs.current['current_address'] = el }}
+                  value={formData.current_address || ''} 
+                  onChange={(e) => updateFormData('current_address', e.target.value)} 
+                  className="form-input"
+                >
                   <option value="">اختر الولاية...</option>
                   {TUNISIAN_GOVERNORATES.map((g) => (
                     <option key={g} value={g}>{g}</option>
@@ -410,7 +713,12 @@ export default function HousingApplicationForm() {
             <h2 className="text-xl font-bold border-b pb-2">2️⃣ الوضعية المهنية</h2>
             <div>
               <label className="form-label">الوضعية المهنية:</label>
-              <select value={formData.employment_status || ''} onChange={(e) => updateFormData('employment_status', e.target.value)} className="form-input">
+              <select 
+                ref={(el) => { fieldRefs.current['employment_status'] = el }}
+                value={formData.employment_status || ''} 
+                onChange={(e) => updateFormData('employment_status', e.target.value)} 
+                className="form-input"
+              >
                 <option value="">اختر...</option>
                 <option value="موظف قار">موظف قار</option>
                 <option value="موظف بعقد">موظف بعقد</option>
@@ -421,7 +729,12 @@ export default function HousingApplicationForm() {
             </div>
             <div>
               <label className="form-label">قطاع العمل (عمومي / خاص / غير منظم)</label>
-              <select value={formData.work_sector || ''} onChange={(e) => updateFormData('work_sector', e.target.value)} className="form-input">
+              <select 
+                ref={(el) => { fieldRefs.current['work_sector'] = el }}
+                value={formData.work_sector || ''} 
+                onChange={(e) => updateFormData('work_sector', e.target.value)} 
+                className="form-input"
+              >
                 <option value="">اختر...</option>
                 <option value="عمومي">عمومي</option>
                 <option value="خاص">خاص</option>
@@ -430,11 +743,24 @@ export default function HousingApplicationForm() {
             </div>
             <div>
               <label className="form-label">الدخل الشهري الصافي التقريبي</label>
-              <input type="number" min={0} step={0.01} value={formData.net_monthly_income ?? ''} onChange={(e) => updateFormData('net_monthly_income', e.target.value === '' ? undefined : parseFloat(e.target.value))} className="form-input" />
+              <input 
+                ref={(el) => { fieldRefs.current['net_monthly_income'] = el }}
+                type="number" 
+                min={0} 
+                step={0.01} 
+                value={formData.net_monthly_income ?? ''} 
+                onChange={(e) => updateFormData('net_monthly_income', e.target.value === '' ? undefined : parseFloat(e.target.value))} 
+                className="form-input" 
+              />
             </div>
             <div>
               <label className="form-label">هل الدخل قار؟ (نعم / لا)</label>
-              <select value={formData.income_stable || ''} onChange={(e) => updateFormData('income_stable', e.target.value)} className="form-input">
+              <select 
+                ref={(el) => { fieldRefs.current['income_stable'] = el }}
+                value={formData.income_stable || ''} 
+                onChange={(e) => updateFormData('income_stable', e.target.value)} 
+                className="form-input"
+              >
                 <option value="">اختر...</option>
                 <option value="نعم">نعم</option>
                 <option value="لا">لا</option>
@@ -463,7 +789,12 @@ export default function HousingApplicationForm() {
             <h2 className="text-xl font-bold border-b pb-2">3️⃣ الوضعية المالية</h2>
             <div>
               <label className="form-label">هل لديك التزامات مالية حالية؟ (قروض / كراء / أخرى)</label>
-              <select value={formData.has_financial_obligations || ''} onChange={(e) => updateFormData('has_financial_obligations', e.target.value)} className="form-input">
+              <select 
+                ref={(el) => { fieldRefs.current['has_financial_obligations'] = el }}
+                value={formData.has_financial_obligations || ''} 
+                onChange={(e) => updateFormData('has_financial_obligations', e.target.value)} 
+                className="form-input"
+              >
                 <option value="">اختر...</option>
                 <option value="نعم">نعم</option>
                 <option value="لا">لا</option>
@@ -471,15 +802,36 @@ export default function HousingApplicationForm() {
             </div>
             <div>
               <label className="form-label">القيمة الجملية للالتزامات الشهرية (د.ت)</label>
-              <input type="number" min={0} step={0.01} value={formData.total_monthly_obligations ?? ''} onChange={(e) => updateFormData('total_monthly_obligations', e.target.value === '' ? undefined : parseFloat(e.target.value))} className="form-input" />
+              <input 
+                ref={(el) => { fieldRefs.current['total_monthly_obligations'] = el }}
+                type="number" 
+                min={0} 
+                step={0.01} 
+                value={formData.total_monthly_obligations ?? ''} 
+                onChange={(e) => updateFormData('total_monthly_obligations', e.target.value === '' ? undefined : parseFloat(e.target.value))} 
+                className="form-input" 
+              />
             </div>
             <div>
               <label className="form-label">القدرة القصوى على الدفع الشهري للسكن (د.ت)</label>
-              <input type="number" min={0} step={0.01} value={formData.max_monthly_payment ?? ''} onChange={(e) => updateFormData('max_monthly_payment', e.target.value === '' ? undefined : parseFloat(e.target.value))} className="form-input" />
+              <input 
+                ref={(el) => { fieldRefs.current['max_monthly_payment'] = el }}
+                type="number" 
+                min={0} 
+                step={0.01} 
+                value={formData.max_monthly_payment ?? ''} 
+                onChange={(e) => updateFormData('max_monthly_payment', e.target.value === '' ? undefined : parseFloat(e.target.value))} 
+                className="form-input" 
+              />
             </div>
             <div>
               <label className="form-label">هل يمكنك توفير تسبقة في حدود 20%؟ (نعم / لا / جزئياً)</label>
-              <select value={formData.can_save_20_percent || ''} onChange={(e) => updateFormData('can_save_20_percent', e.target.value)} className="form-input">
+              <select 
+                ref={(el) => { fieldRefs.current['can_save_20_percent'] = el }}
+                value={formData.can_save_20_percent || ''} 
+                onChange={(e) => updateFormData('can_save_20_percent', e.target.value)} 
+                className="form-input"
+              >
                 <option value="">اختر...</option>
                 <option value="نعم">نعم</option>
                 <option value="لا">لا</option>
@@ -499,7 +851,12 @@ export default function HousingApplicationForm() {
             <h2 className="text-xl font-bold border-b pb-2">4️⃣ الوضعية السكنية الحالية</h2>
             <div>
               <label className="form-label">نوع السكن الحالي:</label>
-              <select value={formData.current_housing_type || ''} onChange={(e) => updateFormData('current_housing_type', e.target.value)} className="form-input">
+              <select 
+                ref={(el) => { fieldRefs.current['current_housing_type'] = el }}
+                value={formData.current_housing_type || ''} 
+                onChange={(e) => updateFormData('current_housing_type', e.target.value)} 
+                className="form-input"
+              >
                 <option value="">اختر...</option>
                 <option value="كراء">كراء</option>
                 <option value="ملك">ملك</option>
@@ -535,7 +892,12 @@ export default function HousingApplicationForm() {
             <h2 className="text-xl font-bold border-b pb-2">5️⃣ العقار</h2>
             <div>
               <label className="form-label">هل تملك أرضاً صالحة للبناء؟</label>
-              <select value={formData.owns_land || ''} onChange={(e) => updateFormData('owns_land', e.target.value)} className="form-input">
+              <select 
+                ref={(el) => { fieldRefs.current['owns_land'] = el }}
+                value={formData.owns_land || ''} 
+                onChange={(e) => updateFormData('owns_land', e.target.value)} 
+                className="form-input"
+              >
                 <option value="">اختر...</option>
                 <option value="نعم">نعم</option>
                 <option value="لا">لا</option>
@@ -551,7 +913,13 @@ export default function HousingApplicationForm() {
                 <div className="grid md:grid-cols-2 gap-4">
                   <div className="md:col-span-2">
                     <label className="form-label">موقع الأرض بالتفصيل (ولاية / معتمدية / عمادة)</label>
-                    <input type="text" value={formData.land_location || ''} onChange={(e) => updateFormData('land_location', e.target.value)} className="form-input" />
+                    <input 
+                      ref={(el) => { fieldRefs.current['land_location'] = el }}
+                      type="text" 
+                      value={formData.land_location || ''} 
+                      onChange={(e) => updateFormData('land_location', e.target.value)} 
+                      className="form-input" 
+                    />
                   </div>
                   <div className="md:col-span-2">
                     <label className="form-label">عنوان تقريبي أو نقطة GPS (اختياري)</label>
@@ -559,11 +927,23 @@ export default function HousingApplicationForm() {
                   </div>
                   <div>
                     <label className="form-label">مساحة الأرض بالمتر المربع</label>
-                    <input type="number" min={0} value={formData.land_area_sqm ?? ''} onChange={(e) => updateFormData('land_area_sqm', e.target.value === '' ? undefined : parseFloat(e.target.value))} className="form-input" />
+                    <input 
+                      ref={(el) => { fieldRefs.current['land_area_sqm'] = el }}
+                      type="number" 
+                      min={0} 
+                      value={formData.land_area_sqm ?? ''} 
+                      onChange={(e) => updateFormData('land_area_sqm', e.target.value === '' ? undefined : parseFloat(e.target.value))} 
+                      className="form-input" 
+                    />
                   </div>
                   <div>
                     <label className="form-label">طبيعة الأرض</label>
-                    <select value={formData.land_nature || ''} onChange={(e) => updateFormData('land_nature', e.target.value)} className="form-input">
+                    <select 
+                      ref={(el) => { fieldRefs.current['land_nature'] = el }}
+                      value={formData.land_nature || ''} 
+                      onChange={(e) => updateFormData('land_nature', e.target.value)} 
+                      className="form-input"
+                    >
                       <option value="">اختر...</option>
                       <option value="داخل منطقة بلدية">داخل منطقة بلدية</option>
                       <option value="خارج المنطقة البلدية">خارج المنطقة البلدية</option>
@@ -572,7 +952,12 @@ export default function HousingApplicationForm() {
                   </div>
                   <div>
                     <label className="form-label">نوع الملكية</label>
-                    <select value={formData.land_ownership_type || ''} onChange={(e) => updateFormData('land_ownership_type', e.target.value)} className="form-input">
+                    <select 
+                      ref={(el) => { fieldRefs.current['land_ownership_type'] = el }}
+                      value={formData.land_ownership_type || ''} 
+                      onChange={(e) => updateFormData('land_ownership_type', e.target.value)} 
+                      className="form-input"
+                    >
                       <option value="">اختر...</option>
                       <option value="ملك شخصي">ملك شخصي</option>
                       <option value="ملك مشترك">ملك مشترك</option>
@@ -723,7 +1108,13 @@ export default function HousingApplicationForm() {
             
             <div>
               <label className="form-label">نوع السكن *</label>
-              <select value={formData.housing_type_model || ''} onChange={(e) => updateFormData('housing_type_model', e.target.value)} className="form-input" required>
+              <select 
+                ref={(el) => { fieldRefs.current['housing_type_model'] = el }}
+                value={formData.housing_type_model || ''} 
+                onChange={(e) => updateFormData('housing_type_model', e.target.value)} 
+                className="form-input" 
+                required
+              >
                 <option value="">اختر...</option>
                 <option value="شقة">شقة (APARTMENT)</option>
                 <option value="فيلا اقتصادية">فيلا اقتصادية (VILLA)</option>
@@ -735,7 +1126,13 @@ export default function HousingApplicationForm() {
 
             <div>
               <label className="form-label">النوع: فردي / جماعي *</label>
-              <select value={formData.housing_individual_collective || ''} onChange={(e) => updateFormData('housing_individual_collective', e.target.value)} className="form-input" required>
+              <select 
+                ref={(el) => { fieldRefs.current['housing_individual_collective'] = el }}
+                value={formData.housing_individual_collective || ''} 
+                onChange={(e) => updateFormData('housing_individual_collective', e.target.value)} 
+                className="form-input" 
+                required
+              >
                 <option value="">اختر...</option>
                 <option value="فردي">فردي</option>
                 <option value="جماعي">جماعي</option>
@@ -744,7 +1141,7 @@ export default function HousingApplicationForm() {
 
             <div>
               <label className="form-label">المساحة الجملية المرغوبة *</label>
-              <div className="space-y-2">
+              <div className="space-y-2" ref={(el) => { fieldRefs.current['housing_area'] = el as any }}>
                 <div className="grid grid-cols-2 gap-2">
                   {['60', '80', '100', 'أكثر من 100'].map((area) => {
                     const value = area === 'أكثر من 100' ? 'custom' : area
@@ -771,6 +1168,7 @@ export default function HousingApplicationForm() {
                   <div className="mt-2">
                     <label className="form-label text-sm">المساحة المخصصة (م²)</label>
                     <input 
+                      ref={(el) => { fieldRefs.current['housing_area_custom'] = el }}
                       type="number" 
                       min={100} 
                       value={formData.housing_area_custom ?? ''} 
@@ -860,7 +1258,13 @@ export default function HousingApplicationForm() {
             
             <div>
               <label className="form-label">نوع الدفع *</label>
-              <select value={formData.payment_type || ''} onChange={(e) => updateFormData('payment_type', e.target.value)} className="form-input" required>
+              <select 
+                ref={(el) => { fieldRefs.current['payment_type'] = el }}
+                value={formData.payment_type || ''} 
+                onChange={(e) => updateFormData('payment_type', e.target.value)} 
+                className="form-input" 
+                required
+              >
                 <option value="">اختر...</option>
                 <option value="تقسيط">تقسيط</option>
                 <option value="دفع كامل">دفع كامل</option>
@@ -886,7 +1290,13 @@ export default function HousingApplicationForm() {
 
                 <div>
                   <label className="form-label">مدة التقسيط (سنوات) *</label>
-                  <select value={formData.installment_period || ''} onChange={(e) => updateFormData('installment_period', e.target.value)} className="form-input" required>
+                  <select 
+                    ref={(el) => { fieldRefs.current['installment_period'] = el }}
+                    value={formData.installment_period || ''} 
+                    onChange={(e) => updateFormData('installment_period', e.target.value)} 
+                    className="form-input" 
+                    required
+                  >
                     <option value="">اختر...</option>
                     <option value="5">5 سنوات</option>
                     <option value="10">10 سنوات</option>
