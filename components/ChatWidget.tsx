@@ -150,9 +150,11 @@ export default function ChatWidget() {
       <button
         type="button"
         onClick={() => setOpen((o) => !o)}
-        className="fixed z-[9999] flex items-center justify-center rounded-full bg-primary-600 text-white shadow-lg hover:bg-primary-700 hover:shadow-xl active:scale-95 w-14 h-14 sm:w-12 sm:h-12 border border-primary-700/30 touch-manipulation"
+        className={`fixed z-[9999] flex items-center justify-center rounded-full bg-primary-600 text-white shadow-lg hover:bg-primary-700 hover:shadow-xl active:scale-95 w-14 h-14 sm:w-12 sm:h-12 border border-primary-700/30 touch-manipulation transition-all duration-300 ${
+          open ? 'sm:bottom-[26rem]' : ''
+        }`}
         style={{ 
-          bottom: 'max(1rem, calc(env(safe-area-inset-bottom, 0px) + 1rem))', 
+          bottom: 'max(1rem, calc(env(safe-area-inset-bottom, 0px) + 1rem))',
           right: 'max(1rem, calc(env(safe-area-inset-right, 0px) + 1rem))',
           WebkitTapHighlightColor: 'transparent'
         }}
@@ -164,7 +166,7 @@ export default function ChatWidget() {
 
       {open && (
         <div
-          className="fixed z-[9998] flex flex-col bg-white border border-gray-200 rounded-t-3xl shadow-2xl inset-x-0 bottom-0 top-0 sm:inset-auto sm:right-4 sm:left-auto sm:bottom-20 sm:top-auto sm:w-[22rem] sm:max-h-[28rem] sm:rounded-3xl chat-container"
+          className="fixed z-[9998] flex flex-col bg-white border border-gray-200 rounded-t-3xl shadow-2xl inset-x-0 bottom-0 top-0 sm:inset-auto sm:right-4 sm:left-auto sm:bottom-24 sm:top-auto sm:w-[22rem] sm:max-h-[28rem] sm:rounded-3xl chat-container"
           style={{ 
             paddingTop: 'max(env(safe-area-inset-top, 0px), 0px)',
             paddingBottom: 'max(env(safe-area-inset-bottom, 0px), 0px)',
