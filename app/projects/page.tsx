@@ -113,7 +113,7 @@ export default function ProjectsPage() {
     <div className="min-h-screen bg-surface">
       <header className="sticky top-0 z-10 bg-white/95 backdrop-blur border-b border-gray-100">
         <div className="max-w-[28rem] mx-auto px-4 h-14 flex items-center justify-center">
-          <Image src="/logo.png" alt="DOMOBAT" width={112} height={112} className="rounded-2xl" style={{ width: 'auto', height: 'auto' }} />
+          <Image src="/logo.png" alt="DOMOBAT" width={112} height={112} className="rounded-2xl w-auto h-auto" />
         </div>
       </header>
 

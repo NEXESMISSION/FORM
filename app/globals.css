@@ -211,3 +211,43 @@ a {
   -ms-overflow-style: none;
   scrollbar-width: none;
 }
+
+/* ========== Chat Widget Mobile Optimizations ========== */
+@supports (height: 100dvh) {
+  /* Use dynamic viewport height for better mobile support */
+  .chat-container {
+    height: 100dvh;
+    max-height: 100dvh;
+  }
+}
+
+/* Prevent zoom on input focus (iOS) */
+input[type="text"],
+input[type="email"],
+input[type="tel"],
+textarea {
+  font-size: 16px !important;
+}
+
+/* Touch-friendly tap targets */
+.touch-manipulation {
+  touch-action: manipulation;
+  -webkit-tap-highlight-color: transparent;
+}
+
+/* Smooth scrolling for chat messages */
+.chat-messages-container {
+  -webkit-overflow-scrolling: touch;
+  overscroll-behavior: contain;
+  scroll-behavior: smooth;
+}
+
+/* Prevent layout shift when keyboard opens */
+@media (max-width: 640px) {
+  body.chat-open {
+    position: fixed;
+    width: 100%;
+    height: 100%;
+    overflow: hidden;
+  }
+}

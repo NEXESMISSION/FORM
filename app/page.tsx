@@ -14,8 +14,7 @@ export default function HomePage() {
               alt="DOMOBAT" 
               width={112} 
               height={112} 
-              className="rounded-2xl"
-              style={{ width: 'auto', height: 'auto' }}
+              className="rounded-2xl w-auto h-auto"
               priority
             />
           </div>
@@ -123,7 +122,7 @@ export default function HomePage() {
       <footer className="bg-white border-t border-gray-100 py-8 mt-12">
         <div className="max-w-[28rem] mx-auto px-5">
           <div className="flex items-center justify-center gap-2 mb-4">
-            <Image src="/logo.png" alt="DOMOBAT" width={32} height={32} className="rounded-lg" style={{ width: 'auto', height: 'auto' }} priority />
+            <Image src="/logo.png" alt="DOMOBAT" width={32} height={32} className="rounded-lg w-auto h-auto" priority />
             <span className="text-sm font-semibold text-gray-700">DOMOBAT</span>
           </div>
           <p className="text-gray-400 text-xs text-center leading-relaxed">

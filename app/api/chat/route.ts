@@ -1,5 +1,4 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { requireAuth } from '@/lib/security/authentication'
 import { apiRateLimit } from '@/lib/security/rateLimiting'
 import { sanitizeInput } from '@/lib/security/sanitization'
 import { detectIntent, CHAT_KNOWLEDGE_BASE } from '@/lib/utils/chatContext'
@@ -109,8 +108,8 @@ const SYSTEM_PROMPT = `أنت مساعد ذكي وودود لخدمة DOMOBAT (�
 
 تذكر: أنت هنا لمساعدة الناس، كن صبوراً ومفيداً وودوداً.`
 
-export const POST = requireAuth(async (request: NextRequest, user: any) => {
-  // Check rate limit
+export const POST = async (request: NextRequest) => {
+  // Check rate limit (applies to both authenticated and unauthenticated users)
   const rateLimitResult = await apiRateLimit(request)
   if (!rateLimitResult.allowed) {
     return NextResponse.json(
@@ -212,4 +211,4 @@ export const POST = requireAuth(async (request: NextRequest, user: any) => {
       { status: 500 }
     )
   }
-})
+}

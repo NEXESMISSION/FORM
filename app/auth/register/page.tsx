@@ -318,7 +318,7 @@ export default function RegisterPage() {
             <ArrowRight className="w-5 h-5" />
             <span className="text-sm font-medium">الرئيسية</span>
           </Link>
-          <Image src="/logo.png" alt="DOMOBAT" width={112} height={112} className="rounded-2xl" style={{ width: 'auto', height: 'auto' }} priority />
+          <Image src="/logo.png" alt="DOMOBAT" width={112} height={112} className="rounded-2xl w-auto h-auto" priority />
           <div className="w-20"></div>
         </div>
       </nav>

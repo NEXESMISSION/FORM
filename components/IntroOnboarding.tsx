@@ -271,7 +271,7 @@ export default function IntroOnboarding({ userName, onDone }: Props) {
         <div className="w-full max-w-[28rem] flex flex-col items-center text-center">
           {/* Logo */}
           <div className="mb-6 w-14 h-14 rounded-2xl bg-white/10 border border-white/20 flex items-center justify-center overflow-hidden">
-            <Image src="/logo.png" alt="" width={56} height={56} className="object-contain w-12 h-12" style={{ width: 'auto', height: 'auto' }} />
+            <Image src="/logo.png" alt="" width={56} height={56} className="object-contain w-12 h-12" />
           </div>
           {/* Message */}
           <div

@@ -41,11 +41,34 @@ export default function ChatWidget() {
   }, [messages, setSavedMessages])
 
   useEffect(() => {
+    // Prevent body scroll when chat is open on mobile
+    if (open) {
+      document.body.classList.add('chat-open')
+    } else {
+      document.body.classList.remove('chat-open')
+    }
+    
+    return () => {
+      document.body.classList.remove('chat-open')
+    }
+  }, [open])
+
+  useEffect(() => {
     if (open && listRef.current) {
-      listRef.current.scrollTop = listRef.current.scrollHeight
+      // Use setTimeout to ensure DOM is updated
+      setTimeout(() => {
+        if (listRef.current) {
+          listRef.current.scrollTop = listRef.current.scrollHeight
+        }
+      }, 100)
     }
     if (open && inputRef.current) {
-      inputRef.current.focus()
+      // Delay focus to prevent keyboard from pushing content immediately
+      setTimeout(() => {
+        if (inputRef.current) {
+          inputRef.current.focus()
+        }
+      }, 300)
     }
   }, [open, messages])
 
@@ -91,8 +114,12 @@ export default function ChatWidget() {
       <button
         type="button"
         onClick={() => setOpen((o) => !o)}
-        className="fixed z-[9999] flex items-center justify-center rounded-full bg-primary-600 text-white shadow-md hover:bg-primary-700 hover:shadow-lg active:scale-95 w-11 h-11 sm:w-12 sm:h-12 border border-primary-700/30"
-        style={{ bottom: 'max(0.75rem, calc(env(safe-area-inset-bottom) + 0.25rem))', right: '0.75rem' }}
+        className="fixed z-[9999] flex items-center justify-center rounded-full bg-primary-600 text-white shadow-lg hover:bg-primary-700 hover:shadow-xl active:scale-95 w-14 h-14 sm:w-12 sm:h-12 border border-primary-700/30 touch-manipulation"
+        style={{ 
+          bottom: 'max(1rem, calc(env(safe-area-inset-bottom, 0px) + 1rem))', 
+          right: 'max(1rem, calc(env(safe-area-inset-right, 0px) + 1rem))',
+          WebkitTapHighlightColor: 'transparent'
+        }}
         aria-label="فتح الدردشة"
         title="دردشة"
       >
@@ -101,10 +128,15 @@ export default function ChatWidget() {
 
       {open && (
         <div
-          className="fixed z-[9998] flex flex-col bg-white border border-gray-200 rounded-t-3xl shadow-2xl inset-x-0 bottom-0 top-[15%] sm:inset-auto sm:right-4 sm:left-auto sm:bottom-20 sm:top-auto sm:w-[22rem] sm:max-h-[28rem] sm:rounded-3xl"
-          style={{ paddingBottom: 'env(safe-area-inset-bottom)' }}
+          className="fixed z-[9998] flex flex-col bg-white border border-gray-200 rounded-t-3xl shadow-2xl inset-x-0 bottom-0 top-0 sm:inset-auto sm:right-4 sm:left-auto sm:bottom-20 sm:top-auto sm:w-[22rem] sm:max-h-[28rem] sm:rounded-3xl chat-container"
+          style={{ 
+            paddingTop: 'max(env(safe-area-inset-top, 0px), 0px)',
+            paddingBottom: 'max(env(safe-area-inset-bottom, 0px), 0px)',
+            height: '100dvh',
+            maxHeight: '100dvh'
+          }}
         >
-          <div className="shrink-0 flex items-center justify-between px-4 py-3 border-b border-gray-100 bg-gradient-to-r from-primary-600 to-primary-700 text-white rounded-t-3xl">
+          <div className="shrink-0 flex items-center justify-between px-4 py-3 border-b border-gray-100 bg-gradient-to-r from-primary-600 to-primary-700 text-white rounded-t-3xl sm:rounded-t-3xl" style={{ paddingTop: 'max(env(safe-area-inset-top, 0px), 0.75rem)' }}>
             <div className="flex items-center gap-2">
               <div className="p-1.5 rounded-lg bg-white/20">
                 <Sparkles className="w-4 h-4" />
@@ -135,7 +167,10 @@ export default function ChatWidget() {
               </button>
             </div>
           </div>
-          <div ref={listRef} className="flex-1 overflow-y-auto p-4 space-y-3 min-h-0">
+          <div 
+            ref={listRef} 
+            className="flex-1 overflow-y-auto p-4 space-y-3 min-h-0 chat-messages-container"
+          >
             {messages.length === 0 && (
               <div className="space-y-4">
                 <div className="rounded-2xl rounded-tl-md bg-gradient-to-br from-primary-50 to-indigo-50 border border-primary-200 px-5 py-5 space-y-4 text-right">
@@ -183,7 +218,8 @@ export default function ChatWidget() {
                       <button
                         key={idx}
                         onClick={() => send(q)}
-                        className="px-3 py-2 text-xs rounded-xl bg-white border border-gray-200 hover:border-primary-300 hover:bg-primary-50 text-gray-700 hover:text-primary-700 transition-all text-right"
+                        className="px-3 py-2 text-xs rounded-xl bg-white border border-gray-200 hover:border-primary-300 hover:bg-primary-50 text-gray-700 hover:text-primary-700 transition-all text-right touch-manipulation"
+                        style={{ WebkitTapHighlightColor: 'transparent' }}
                       >
                         {q}
                       </button>
@@ -193,12 +229,12 @@ export default function ChatWidget() {
               </div>
             )}
             {messages.map((m, i) => (
-              <div key={i} className={`flex ${m.role === 'user' ? 'justify-start' : 'justify-end'} animate-in fade-in slide-in-from-bottom-2`}>
+              <div key={i} className={`flex ${m.role === 'user' ? 'justify-end' : 'justify-start'} animate-in fade-in slide-in-from-bottom-2`}>
                 <div
-                  className={`max-w-[85%] px-4 py-3 rounded-2xl text-sm shadow-sm ${
+                  className={`max-w-[85%] sm:max-w-[75%] px-4 py-3 rounded-2xl text-sm shadow-sm ${
                     m.role === 'user'
-                      ? 'bg-primary-600 text-white rounded-tl-md'
-                      : 'bg-gray-100 text-gray-900 rounded-tr-md border border-gray-200'
+                      ? 'bg-primary-600 text-white rounded-tr-md'
+                      : 'bg-gray-100 text-gray-900 rounded-tl-md border border-gray-200'
                   }`}
                 >
                   <p className="whitespace-pre-wrap leading-relaxed">{m.content}</p>
@@ -237,7 +273,12 @@ export default function ChatWidget() {
               </div>
             )}
           </div>
-          <div className="shrink-0 p-3 border-t border-gray-100 bg-gray-50/50">
+          <div 
+            className="shrink-0 p-3 border-t border-gray-100 bg-gray-50/50"
+            style={{ 
+              paddingBottom: 'max(env(safe-area-inset-bottom, 0px), 0.75rem)'
+            }}
+          >
             {messages.length > 0 && messages.length < 3 && (
               <div className="mb-2 flex flex-wrap gap-1.5">
                 {QUICK_QUESTIONS.slice(0, 3).map((q, idx) => (
@@ -245,7 +286,8 @@ export default function ChatWidget() {
                     key={idx}
                     onClick={() => send(q)}
                     disabled={loading}
-                    className="px-2.5 py-1 text-xs rounded-lg bg-white border border-gray-200 hover:border-primary-300 hover:bg-primary-50 text-gray-600 hover:text-primary-700 transition-all disabled:opacity-50"
+                    className="px-2.5 py-1 text-xs rounded-lg bg-white border border-gray-200 hover:border-primary-300 hover:bg-primary-50 text-gray-600 hover:text-primary-700 transition-all disabled:opacity-50 touch-manipulation"
+                    style={{ WebkitTapHighlightColor: 'transparent' }}
                   >
                     {q}
                   </button>
@@ -267,6 +309,10 @@ export default function ChatWidget() {
                 placeholder="اكتب سؤالك هنا..."
                 className="flex-1 px-4 py-2.5 rounded-xl border-2 border-gray-200 bg-white text-sm focus:ring-2 focus:ring-primary-500/20 focus:border-primary-500 outline-none transition-all"
                 disabled={loading}
+                style={{ 
+                  fontSize: '16px', // Prevents zoom on iOS
+                  WebkitAppearance: 'none'
+                }}
               />
               <button
                 type="button"

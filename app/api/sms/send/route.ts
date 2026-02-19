@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { smsRateLimit } from '@/lib/security/rateLimiting'
 import { sanitizePhone } from '@/lib/security/sanitization'
-import { requireAuth } from '@/lib/security/authentication'
+import { verifyAuth } from '@/lib/security/authentication'
 
 // Infobip API configuration - MUST be in environment variables
 const INFOBIP_BASE_URL = process.env.INFOBIP_BASE_URL
@@ -45,8 +45,8 @@ function formatTunisianPhone(phone: string): string {
   return cleaned
 }
 
-export const POST = requireAuth(async (request: NextRequest, user: any) => {
-  // Check rate limit
+export const POST = async (request: NextRequest) => {
+  // Check rate limit (applies to both authenticated and unauthenticated users)
   const rateLimitResult = await smsRateLimit(request)
   if (!rateLimitResult.allowed) {
     return NextResponse.json(
@@ -192,10 +192,10 @@ export const POST = requireAuth(async (request: NextRequest, user: any) => {
       { status: 500 }
     )
   }
-})
+}
 
-// Verify code endpoint
-export const PUT = requireAuth(async (request: NextRequest, user: any) => {
+// Verify code endpoint (also works without auth for registration)
+export const PUT = async (request: NextRequest) => {
   try {
     const body = await request.json()
     const { phone: rawPhone, code: rawCode } = body
@@ -256,4 +256,4 @@ export const PUT = requireAuth(async (request: NextRequest, user: any) => {
       { status: 500 }
     )
   }
-})
+}

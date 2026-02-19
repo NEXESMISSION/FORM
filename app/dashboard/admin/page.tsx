@@ -355,7 +355,7 @@ export default function AdminDashboard() {
     <div className="min-h-screen bg-surface">
       <header className="sticky top-0 z-10 bg-white/95 backdrop-blur border-b border-gray-100">
         <div className="max-w-[28rem] sm:max-w-2xl md:max-w-4xl mx-auto px-3 sm:px-4 h-14 sm:h-20 flex justify-between items-center gap-2">
-          <Image src="/logo.png" alt="DOMOBAT" width={80} height={80} className="rounded-xl sm:rounded-2xl shrink-0 object-contain h-10 w-10 sm:h-14 sm:w-14 md:h-16 md:w-16" style={{ width: 'auto', height: 'auto' }} />
+          <Image src="/logo.png" alt="DOMOBAT" width={80} height={80} className="rounded-xl sm:rounded-2xl shrink-0 object-contain h-10 w-10 sm:h-14 sm:w-14 md:h-16 md:w-16" />
           <button
             onClick={handleLogout}
             className="flex items-center gap-1.5 sm:gap-2 text-gray-600 text-xs sm:text-sm font-medium hover:text-gray-900 py-2 px-2"

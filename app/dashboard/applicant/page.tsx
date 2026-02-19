@@ -533,7 +533,7 @@ function ApplicantDashboardContent() {
       <header className="sticky top-0 z-10 bg-white/95 backdrop-blur border-b border-gray-100">
         <div className="max-w-[28rem] mx-auto px-4 h-14 flex items-center justify-between">
           <div className="flex items-center min-w-0">
-            <Image src="/logo.png" alt="DOMOBAT" width={112} height={112} className="rounded-2xl shrink-0" style={{ width: 'auto', height: 'auto' }} />
+            <Image src="/logo.png" alt="DOMOBAT" width={112} height={112} className="rounded-2xl shrink-0 w-auto h-auto" />
           </div>
           <div className="flex items-center gap-2">
             <button
