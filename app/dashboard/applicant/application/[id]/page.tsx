@@ -24,6 +24,7 @@ const STATUS_LABELS: Record<string, string> = {
   pending: 'قيد المعالجة',
   in_progress: 'قيد المعالجة',
   documents_requested: 'طلب مستندات إضافية',
+  documents_rejected: 'مستندات مرفوضة - مطلوب استبدال',
   approved: 'مقبول',
   rejected: 'مرفوض',
 }
@@ -32,6 +33,7 @@ const STATUS_COLORS: Record<string, string> = {
   pending: 'bg-amber-100 text-amber-800 border-amber-200',
   in_progress: 'bg-primary-100 text-primary-800 border-primary-200',
   documents_requested: 'bg-orange-100 text-orange-800 border-orange-200',
+  documents_rejected: 'bg-red-100 text-red-800 border-red-200',
   approved: 'bg-green-100 text-green-800 border-green-200',
   rejected: 'bg-red-100 text-red-800 border-red-200',
 }
@@ -67,19 +69,6 @@ export default function HousingApplicationDetailPage() {
   const [pendingByDocType, setPendingByDocType] = useState<Record<string, File[]>>({})
   const fileInputRefs = useRef<Record<string, HTMLInputElement | null>>({})
 
-  // Log state changes (only when there are pending files)
-  useEffect(() => {
-    const hasPending = Object.values(pendingByDocType).some(files => files?.length > 0)
-    if (hasPending) {
-      console.log('[STATE] pendingByDocType changed:', pendingByDocType)
-      console.log('[STATE] pendingByDocType keys:', Object.keys(pendingByDocType))
-      Object.entries(pendingByDocType).forEach(([key, files]) => {
-        if (files?.length > 0) {
-          console.log(`[STATE] ${key}:`, files.length, 'files')
-        }
-      })
-    }
-  }, [pendingByDocType])
 
   useEffect(() => {
     if (!id) return
@@ -107,13 +96,8 @@ export default function HousingApplicationDetailPage() {
   }, [id, router])
 
   const handleFileSelectFor = (docType: string, e: React.ChangeEvent<HTMLInputElement>) => {
-    console.log('[handleFileSelectFor] Called for docType:', docType)
-    console.log('[handleFileSelectFor] Event target:', e.target)
-    console.log('[handleFileSelectFor] Event target files:', e.target.files)
-    
     const fileList = e.target.files
     if (!fileList || fileList.length === 0) {
-      console.log('[handleFileSelectFor] No files selected, returning early')
       return
     }
     
@@ -127,103 +111,67 @@ export default function HousingApplicationDetailPage() {
       }
     }
     
-    console.log('[handleFileSelectFor] Files selected:', filesArray.length)
-    console.log('[handleFileSelectFor] File names:', filesArray.map(f => f.name))
-    console.log('[handleFileSelectFor] Files array details:', filesArray.map(f => ({ name: f.name, size: f.size, type: f.type })))
-    
     if (filesArray.length === 0) {
-      console.error('[handleFileSelectFor] ERROR: filesArray is empty after conversion!')
       return
     }
     
     // Update state with the files array
     setPendingByDocType((prev) => {
       const currentPending = prev[docType] || []
-      console.log('[handleFileSelectFor] Previous state - currentPending length:', currentPending.length)
-      console.log('[handleFileSelectFor] Previous state - currentPending files:', currentPending.map(f => f.name))
-      
       const newPending = [...currentPending, ...filesArray]
-      console.log('[handleFileSelectFor] New pending length:', newPending.length)
-      console.log('[handleFileSelectFor] New pending files:', newPending.map(f => f.name))
       
-      const updated = {
+      return {
         ...prev,
         [docType]: newPending,
       }
-      console.log('[handleFileSelectFor] Updated state:', updated)
-      return updated
     })
     
     // Reset input value AFTER state update
     setTimeout(() => {
       if (e.target) {
         e.target.value = ''
-        console.log('[handleFileSelectFor] Input value reset')
       }
     }, 100)
   }
 
   const triggerFileInput = (docType: string) => {
-    console.log('[triggerFileInput] Called for docType:', docType)
-    console.log('[triggerFileInput] fileInputRefs.current:', fileInputRefs.current)
     const input = fileInputRefs.current[docType]
-    console.log('[triggerFileInput] Input element for', docType, ':', input)
     if (input) {
-      console.log('[triggerFileInput] Clicking input...')
       input.click()
-      console.log('[triggerFileInput] Input clicked')
-    } else {
-      console.error('[triggerFileInput] ERROR: No input element found for docType:', docType)
-      console.error('[triggerFileInput] Available refs:', Object.keys(fileInputRefs.current))
     }
   }
 
   const cancelPendingFor = (docType: string) => {
-    console.log('[cancelPendingFor] Cancelling pending files for:', docType)
     setPendingByDocType((prev) => {
-      console.log('[cancelPendingFor] Previous state:', prev)
       const next = { ...prev }
       delete next[docType]
-      console.log('[cancelPendingFor] New state:', next)
       return next
     })
   }
 
   const uploadForDocType = async (docType: string): Promise<boolean> => {
-    console.log('[uploadForDocType] Starting upload for:', docType)
     const files = pendingByDocType[docType]
-    console.log('[uploadForDocType] Files to upload:', files)
-    console.log('[uploadForDocType] Files count:', files?.length)
-    console.log('[uploadForDocType] User:', user?.id)
-    console.log('[uploadForDocType] App:', app?.id)
     
     if (!user || !app || !files?.length) {
-      console.error('[uploadForDocType] ERROR: Missing requirements', { user: !!user, app: !!app, filesCount: files?.length })
       return false
     }
     
     const existing = Array.isArray(app.applicant_documents) ? app.applicant_documents : []
-    console.log('[uploadForDocType] Existing documents:', existing.length)
     setUploadingForDocType(docType)
     
     try {
       const uploaded: { id: string; docType: string; fileName: string; url: string; uploadedAt: string; status?: string }[] = []
       for (let i = 0; i < files.length; i++) {
         const file = files[i]
-        console.log(`[uploadForDocType] Uploading file ${i + 1}/${files.length}:`, file.name, 'Size:', file.size)
         const ext = file.name.split('.').pop() || 'bin'
         const path = `housing-documents/${user.id}/${app.id}/${Date.now()}-${i}.${ext}`
-        console.log('[uploadForDocType] Upload path:', path)
         
         const { error: upErr } = await supabase.storage.from('documents').upload(path, file, { cacheControl: '3600', upsert: false })
         if (upErr) {
-          console.error('[uploadForDocType] Upload error:', upErr)
           throw upErr
         }
-        console.log('[uploadForDocType] File uploaded successfully')
         
         const { data: { publicUrl } } = supabase.storage.from('documents').getPublicUrl(path)
-        console.log('[uploadForDocType] Public URL:', publicUrl)
         
         uploaded.push({
           id: `${Date.now()}-${Math.random().toString(36).substring(2, 9)}`,
@@ -236,29 +184,20 @@ export default function HousingApplicationDetailPage() {
       }
       
       const next = [...existing, ...uploaded]
-      console.log('[uploadForDocType] Total documents after upload:', next.length)
-      console.log('[uploadForDocType] Updating database...')
       
       const { error } = await supabase.from('housing_applications').update({ applicant_documents: next }).eq('id', app.id).eq('user_id', user.id)
       if (error) {
-        console.error('[uploadForDocType] Database update error:', error)
         throw error
       }
-      console.log('[uploadForDocType] Database updated successfully')
       
       setApp((prev: any) => ({ ...prev, applicant_documents: next }))
       cancelPendingFor(docType)
-      console.log('[uploadForDocType] Upload completed successfully')
       return true
     } catch (e: any) {
-      console.error('[uploadForDocType] ERROR during upload:', e)
-      console.error('[uploadForDocType] Error message:', e?.message)
-      console.error('[uploadForDocType] Error stack:', e?.stack)
       toast.error(e?.message || 'فشل رفع المستند')
       return false
     } finally {
       setUploadingForDocType(null)
-      console.log('[uploadForDocType] Upload state reset')
     }
   }
 
@@ -641,11 +580,6 @@ export default function HousingApplicationDetailPage() {
                         ? 'border-purple-300 bg-purple-50/70' // Admin requested, no docs yet - soft purple
                         : 'border-gray-100 bg-gray-50/50' // Default - gray
 
-                // Log render state (only for first slot to avoid spam)
-                if (slotIdx === 0 && pending?.length) {
-                  console.log('[RENDER] Rendering document slots with pending files')
-                  console.log('[RENDER] pendingByDocType state:', pendingByDocType)
-                }
 
                 return (
                   <li
@@ -724,14 +658,12 @@ export default function HousingApplicationDetailPage() {
                               <input
                                 ref={(el) => {
                                   fileInputRefs.current[slot.label] = el
-                                  console.log('[REF] Input ref set for', slot.label, ':', el ? 'element found' : 'null')
                                 }}
                                 type="file"
                                 multiple
                                 accept=".pdf,.jpg,.jpeg,.png,.webp"
                                 className="hidden"
                                 onChange={(e) => {
-                                  console.log('[INPUT] onChange fired for', slot.label)
                                   handleFileSelectFor(slot.label, e)
                                 }}
                                 disabled={uploading}
@@ -739,7 +671,6 @@ export default function HousingApplicationDetailPage() {
                               <button
                                 type="button"
                                 onClick={() => {
-                                  console.log('[BUTTON] "إضافة ملفات" clicked for', slot.label)
                                   triggerFileInput(slot.label)
                                 }}
                                 disabled={uploading}
@@ -751,7 +682,6 @@ export default function HousingApplicationDetailPage() {
                               <button
                                 type="button"
                                 onClick={() => {
-                                  console.log('[BUTTON] "حفظ ورفع" clicked for', slot.label, 'pending files:', pending.length)
                                   setConfirmUploadFor(slot.label)
                                 }}
                                 disabled={uploading}
@@ -762,7 +692,6 @@ export default function HousingApplicationDetailPage() {
                               <button
                                 type="button"
                                 onClick={() => {
-                                  console.log('[BUTTON] "إلغاء" clicked for', slot.label)
                                   cancelPendingFor(slot.label)
                                 }}
                                 disabled={uploading}
@@ -777,14 +706,12 @@ export default function HousingApplicationDetailPage() {
                             <input
                               ref={(el) => {
                                 fileInputRefs.current[slot.label] = el
-                                console.log('[REF] Input ref set for', slot.label, '(no pending):', el ? 'element found' : 'null')
                               }}
                               type="file"
                               multiple
                               accept=".pdf,.jpg,.jpeg,.png,.webp"
                               className="hidden"
                               onChange={(e) => {
-                                console.log('[INPUT] onChange fired for', slot.label, '(no pending state)')
                                 handleFileSelectFor(slot.label, e)
                               }}
                               disabled={uploading}
@@ -792,8 +719,6 @@ export default function HousingApplicationDetailPage() {
                             <button
                               type="button"
                               onClick={() => {
-                                const buttonText = allRejected ? 'استبدال' : hasPendingReview ? 'إضافة ملفات' : 'رفع (متعدد)'
-                                console.log('[BUTTON] Upload button clicked for', slot.label, 'button text:', buttonText)
                                 triggerFileInput(slot.label)
                               }}
                               disabled={uploading}

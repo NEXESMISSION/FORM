@@ -270,7 +270,7 @@ export default function IntroOnboarding({ userName, onDone }: Props) {
       <div className="flex-1 flex flex-col items-center justify-center px-6 py-4 min-h-0">
         <div className="w-full max-w-[28rem] flex flex-col items-center text-center">
           {/* Logo */}
-          <div className="mb-6 w-14 h-14 rounded-2xl bg-white/10 border border-white/20 flex items-center justify-center overflow-hidden">
+          <div className="mb-6 w-14 h-14 rounded-2xl bg-white border border-white/30 flex items-center justify-center overflow-hidden shadow-lg">
             <Image src="/logo.png" alt="" width={56} height={56} className="object-contain w-12 h-12" />
           </div>
           {/* Message */}

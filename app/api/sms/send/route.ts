@@ -88,9 +88,18 @@ export const POST = async (request: NextRequest) => {
       )
     }
 
-    // Sanitize and validate phone number
-    const phone = sanitizePhone(rawPhone)
+    // Format phone number (use formatTunisianPhone which is more lenient)
+    const phone = formatTunisianPhone(rawPhone)
     if (!phone) {
+      return NextResponse.json(
+        { error: 'Invalid phone number format. Use +216XXXXXXXXX or 0XXXXXXXX' },
+        { status: 400 }
+      )
+    }
+    
+    // Validate the formatted phone
+    const phoneRegex = /^\+216[0-9]{8}$/
+    if (!phoneRegex.test(phone)) {
       return NextResponse.json(
         { error: 'Invalid phone number format. Use +216XXXXXXXXX or 0XXXXXXXX' },
         { status: 400 }
@@ -207,8 +216,8 @@ export const PUT = async (request: NextRequest) => {
       )
     }
 
-    // Sanitize inputs
-    const phone = sanitizePhone(rawPhone)
+    // Format phone number
+    const phone = formatTunisianPhone(rawPhone)
     const code = rawCode.replace(/\D/g, '') // Only digits
 
     if (!phone || code.length !== 6) {

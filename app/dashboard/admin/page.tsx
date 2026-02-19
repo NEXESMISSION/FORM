@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { supabase } from '@/lib/supabase'
 import Image from 'next/image'
+import type { ImageProps } from 'next/image'
 import { BarChart3, Users, Home, LogOut, Plus, Download, Edit, X, FileText, ExternalLink, CheckCircle, XCircle, Eye, ImageIcon, ShoppingCart, ChevronDown, SlidersHorizontal, FilePlus, User, Calendar, CalendarCheck } from 'lucide-react'
 import toast from 'react-hot-toast'
 import ProjectForm from '@/components/ProjectForm'
@@ -27,6 +28,7 @@ const APP_STATUS_LABELS: Record<string, string> = {
   pending: 'قيد الانتظار',
   in_progress: 'قيد المعالجة',
   documents_requested: 'طلب مستندات',
+  documents_rejected: 'مستندات مرفوضة - مطلوب استبدال',
   approved: 'مقبول',
   rejected: 'مرفوض',
 }
@@ -35,6 +37,7 @@ const PURCHASE_STATUS_LABELS: Record<string, string> = {
   pending: 'قيد المراجعة',
   in_progress: 'قيد المتابعة',
   documents_requested: 'طلب مستندات',
+  documents_rejected: 'مستندات مرفوضة - مطلوب استبدال',
   approved: 'مقبول',
   rejected: 'مرفوض',
 }
@@ -146,7 +149,10 @@ export default function AdminDashboard() {
     try {
       const { data: apps } = await supabase
         .from('housing_applications')
-        .select('*')
+        .select(`
+          *,
+          profiles:user_id (id, phone_number, email, name)
+        `)
         .order('created_at', { ascending: false })
         .limit(100)
       setApplications(apps || [])
@@ -355,7 +361,9 @@ export default function AdminDashboard() {
     <div className="min-h-screen bg-surface">
       <header className="sticky top-0 z-10 bg-white/95 backdrop-blur border-b border-gray-100">
         <div className="max-w-[28rem] sm:max-w-2xl md:max-w-4xl mx-auto px-3 sm:px-4 h-14 sm:h-20 flex justify-between items-center gap-2">
-          <Image src="/logo.png" alt="DOMOBAT" width={80} height={80} className="rounded-xl sm:rounded-2xl shrink-0 object-contain h-10 w-10 sm:h-14 sm:w-14 md:h-16 md:w-16" />
+          <div className="rounded-xl sm:rounded-2xl shrink-0 h-10 w-10 sm:h-14 sm:w-14 md:h-16 md:w-16 relative overflow-hidden">
+            <Image src="/logo.png" alt="DOMOBAT" fill className="object-contain" sizes="64px" />
+          </div>
           <button
             onClick={handleLogout}
             className="flex items-center gap-1.5 sm:gap-2 text-gray-600 text-xs sm:text-sm font-medium hover:text-gray-900 py-2 px-2"
@@ -1325,8 +1333,50 @@ export default function AdminDashboard() {
               const docs = Array.isArray(showDocsModalApp.applicant_documents) ? showDocsModalApp.applicant_documents : []
               const updateDoc = async (newDocs: any[]) => {
                 const { error } = await supabase.from('housing_applications').update({ applicant_documents: newDocs }).eq('id', showDocsModalApp.id)
-                if (error) toast.error('فشل التحديث')
-                else { setShowDocsModalApp((prev: any) => ({ ...prev, applicant_documents: newDocs })); loadData(); setRejectDocState(null); toast.success('تم التحديث') }
+                if (error) {
+                  toast.error('فشل التحديث')
+                  return
+                }
+                
+                // Check if a document was rejected and send WhatsApp notification
+                const rejectedDoc = newDocs.find((d: any, idx: number) => 
+                  d.status === 'rejected' && (!docs[idx] || docs[idx].status !== 'rejected')
+                )
+                
+                if (rejectedDoc) {
+                  // Get user phone number
+                  const app = applications.find((a: any) => a.id === showDocsModalApp.id)
+                  const phoneNumber = app?.profiles?.phone_number || app?.phone || showDocsModalApp.phone
+                  
+                  if (phoneNumber) {
+                    try {
+                      const response = await fetch('/api/whatsapp/send', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({
+                          type: 'document_rejection',
+                          phone: phoneNumber,
+                          documentName: rejectedDoc.fileName || rejectedDoc.docType || 'مستند',
+                          reason: rejectedDoc.rejectionReason || 'يرجى رفع نسخة محدثة من المستند',
+                        }),
+                      })
+                      
+                      if (response.ok) {
+                        console.log('WhatsApp notification sent for document rejection')
+                      } else {
+                        console.error('Failed to send WhatsApp notification:', await response.text())
+                      }
+                    } catch (error) {
+                      console.error('Error sending WhatsApp notification:', error)
+                      // Don't show error to user, just log it
+                    }
+                  }
+                }
+                
+                setShowDocsModalApp((prev: any) => ({ ...prev, applicant_documents: newDocs }))
+                loadData()
+                setRejectDocState(null)
+                toast.success('تم التحديث')
               }
               return (
                 <ul className="space-y-3">
@@ -1666,16 +1716,46 @@ export default function AdminDashboard() {
                     status: 'documents_requested',
                     documents_requested_message: fullMessage,
                   }).eq('id', requestDocsAppId)
-                  if (error) toast.error('فشل التحديث')
-                  else {
-                    toast.success('ستُعرض الرسالة للمتقدم')
-                    setRequestDocsAppId(null)
-                    setRequestDocsMessage('')
-                    setRequestDocsSelectedTypes([])
-                    setRequestDocsCustomTypes([])
-                    setRequestDocsCustomInput('')
-                    loadData()
+                  if (error) {
+                    toast.error('فشل التحديث')
+                    return
                   }
+                  
+                  // Send WhatsApp notification
+                  const app = applications.find((a: any) => a.id === requestDocsAppId)
+                  const phoneNumber = app?.profiles?.phone_number || app?.phone
+                  
+                  if (phoneNumber && allSelected.length > 0) {
+                    try {
+                      const response = await fetch('/api/whatsapp/send', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({
+                          type: 'document_request',
+                          phone: phoneNumber,
+                          requestedDocuments: allSelected,
+                          customMessage: requestDocsMessage.trim() || undefined,
+                        }),
+                      })
+                      
+                      if (response.ok) {
+                        console.log('WhatsApp notification sent for document request')
+                      } else {
+                        console.error('Failed to send WhatsApp notification:', await response.text())
+                      }
+                    } catch (error) {
+                      console.error('Error sending WhatsApp notification:', error)
+                      // Don't show error to user, just log it
+                    }
+                  }
+                  
+                  toast.success('ستُعرض الرسالة للمتقدم')
+                  setRequestDocsAppId(null)
+                  setRequestDocsMessage('')
+                  setRequestDocsSelectedTypes([])
+                  setRequestDocsCustomTypes([])
+                  setRequestDocsCustomInput('')
+                  loadData()
                 }}
                 className="flex-1 px-5 py-3 rounded-xl bg-gradient-to-r from-primary-600 to-primary-700 text-white text-sm font-semibold hover:from-primary-700 hover:to-primary-800 shadow-lg hover:shadow-xl transition-all"
               >
@@ -1740,13 +1820,49 @@ export default function AdminDashboard() {
         const updatePurchaseDocs = async (newDocs: any[]) => {
           const payload = newDocs.map(d => (typeof d === 'object' && d !== null ? d : d))
           const { error } = await supabase.from('project_direct_purchases').update({ documents: payload }).eq('id', showPurchaseDocsModal.id)
-          if (error) toast.error('فشل التحديث')
-          else {
-            setShowPurchaseDocsModal((prev: any) => ({ ...prev, documents: payload }))
-            loadData()
-            setRejectPurchaseDocState(null)
-            toast.success('تم التحديث')
+          if (error) {
+            toast.error('فشل التحديث')
+            return
           }
+          
+          // Check if a document was rejected and send WhatsApp notification
+          const rejectedDoc = newDocs.find((d: any, idx: number) => 
+            d.status === 'rejected' && (!docsAsObjects[idx] || docsAsObjects[idx].status !== 'rejected')
+          )
+          
+          if (rejectedDoc) {
+            // Get user phone number from purchase
+            const purchase = directPurchases.find((p: any) => p.id === showPurchaseDocsModal.id)
+            const phoneNumber = purchase?.profiles?.phone_number || purchase?.phone
+            
+            if (phoneNumber) {
+              try {
+                const response = await fetch('/api/whatsapp/send', {
+                  method: 'POST',
+                  headers: { 'Content-Type': 'application/json' },
+                  body: JSON.stringify({
+                    type: 'document_rejection',
+                    phone: phoneNumber,
+                    documentName: rejectedDoc.fileName || rejectedDoc.docType || 'مستند',
+                    reason: rejectedDoc.rejectionReason || 'يرجى رفع نسخة محدثة من المستند',
+                  }),
+                })
+                
+                if (response.ok) {
+                  console.log('WhatsApp notification sent for purchase document rejection')
+                } else {
+                  console.error('Failed to send WhatsApp notification:', await response.text())
+                }
+              } catch (error) {
+                console.error('Error sending WhatsApp notification:', error)
+              }
+            }
+          }
+          
+          setShowPurchaseDocsModal((prev: any) => ({ ...prev, documents: payload }))
+          loadData()
+          setRejectPurchaseDocState(null)
+          toast.success('تم التحديث')
         }
         return (
           <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50" style={{ padding: 'max(1rem, env(safe-area-inset-top)) max(1rem, env(safe-area-inset-right)) max(1rem, env(safe-area-inset-bottom)) max(1rem, env(safe-area-inset-left))' }}>
@@ -2014,16 +2130,45 @@ export default function AdminDashboard() {
                     status: 'documents_requested',
                     documents_note: fullMessage,
                   }).eq('id', requestPurchaseDocsId)
-                  if (error) toast.error('فشل التحديث')
-                  else {
-                    toast.success('ستُعرض الرسالة للمستخدم')
-                    setRequestPurchaseDocsId(null)
-                    setRequestPurchaseDocsMessage('')
-                    setRequestDocsSelectedTypes([])
-                    setRequestPurchaseDocsCustomTypes([])
-                    setRequestPurchaseDocsCustomInput('')
-                    loadData()
+                  if (error) {
+                    toast.error('فشل التحديث')
+                    return
                   }
+                  
+                  // Send WhatsApp notification
+                  const purchase = directPurchases.find((p: any) => p.id === requestPurchaseDocsId)
+                  const phoneNumber = purchase?.profiles?.phone_number || purchase?.phone
+                  
+                  if (phoneNumber && allSelected.length > 0) {
+                    try {
+                      const response = await fetch('/api/whatsapp/send', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({
+                          type: 'document_request',
+                          phone: phoneNumber,
+                          requestedDocuments: allSelected,
+                          customMessage: requestPurchaseDocsMessage.trim() || undefined,
+                        }),
+                      })
+                      
+                      if (response.ok) {
+                        console.log('WhatsApp notification sent for purchase document request')
+                      } else {
+                        console.error('Failed to send WhatsApp notification:', await response.text())
+                      }
+                    } catch (error) {
+                      console.error('Error sending WhatsApp notification:', error)
+                    }
+                  }
+                  
+                  toast.success('ستُعرض الرسالة للمستخدم')
+                  setRequestPurchaseDocsId(null)
+                  setRequestPurchaseDocsMessage('')
+                  setRequestDocsSelectedTypes([])
+                  setRequestPurchaseDocsCustomTypes([])
+                  setRequestPurchaseDocsCustomInput('')
+                  loadData()
                 }}
                 className="flex-1 px-5 py-3 rounded-xl bg-gradient-to-r from-primary-600 to-primary-700 text-white text-sm font-semibold hover:from-primary-700 hover:to-primary-800 shadow-lg hover:shadow-xl transition-all"
               >

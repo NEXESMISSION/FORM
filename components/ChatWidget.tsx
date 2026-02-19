@@ -1,10 +1,10 @@
 'use client'
 
-import { useState, useRef, useEffect } from 'react'
+import { useState, useRef, useEffect, useCallback } from 'react'
 import { MessageCircle, X, Send, Loader2, Sparkles, Trash2 } from 'lucide-react'
 import { useDebouncedValue, useLocalStorage } from '@/lib/hooks'
 
-type ChatMessage = { role: 'user' | 'assistant'; content: string; timestamp?: Date }
+type ChatMessage = { role: 'user' | 'assistant'; content: string; timestamp?: Date | string }
 
 const QUICK_QUESTIONS = [
   'كيف أسجل في التطبيق؟',
@@ -17,7 +17,18 @@ const QUICK_QUESTIONS = [
 export default function ChatWidget() {
   const [open, setOpen] = useState(false)
   const [savedMessages, setSavedMessages, clearSavedMessages] = useLocalStorage<ChatMessage[]>('chat-history', [])
-  const [messages, setMessages] = useState<ChatMessage[]>(savedMessages)
+  
+  // Initialize messages with normalized timestamps from localStorage
+  const [messages, setMessages] = useState<ChatMessage[]>(() => {
+    if (savedMessages && savedMessages.length > 0) {
+      return savedMessages.map(msg => ({
+        ...msg,
+        timestamp: msg.timestamp ? (typeof msg.timestamp === 'string' ? new Date(msg.timestamp) : msg.timestamp) : undefined
+      }))
+    }
+    return []
+  })
+  
   const [input, setInput] = useState('')
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -25,18 +36,22 @@ export default function ChatWidget() {
   const listRef = useRef<HTMLDivElement>(null)
   const inputRef = useRef<HTMLInputElement>(null)
   const debouncedInput = useDebouncedValue(input, 500)
+  const isInitialMount = useRef(true)
 
-  // Load saved messages on mount
+  // Save messages to localStorage (skip initial mount to prevent loop)
   useEffect(() => {
-    if (savedMessages && savedMessages.length > 0) {
-      setMessages(savedMessages)
+    if (isInitialMount.current) {
+      isInitialMount.current = false
+      return
     }
-  }, [savedMessages])
-
-  // Save messages to localStorage
-  useEffect(() => {
+    
     if (messages.length > 0) {
-      setSavedMessages(messages)
+      // Convert Date objects to ISO strings for storage
+      const messagesToSave = messages.map(msg => ({
+        ...msg,
+        timestamp: msg.timestamp instanceof Date ? msg.timestamp.toISOString() : msg.timestamp
+      }))
+      setSavedMessages(messagesToSave)
     }
   }, [messages, setSavedMessages])
 
@@ -242,7 +257,10 @@ export default function ChatWidget() {
                     <p className={`text-xs mt-1.5 ${
                       m.role === 'user' ? 'text-primary-100' : 'text-gray-500'
                     }`}>
-                      {m.timestamp.toLocaleTimeString('ar-TN', { hour: '2-digit', minute: '2-digit' })}
+                      {(() => {
+                        const timestamp = typeof m.timestamp === 'string' ? new Date(m.timestamp) : m.timestamp
+                        return timestamp instanceof Date ? timestamp.toLocaleTimeString('ar-TN', { hour: '2-digit', minute: '2-digit' }) : ''
+                      })()}
                     </p>
                   )}
                 </div>
