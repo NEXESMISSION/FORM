@@ -4,6 +4,7 @@ import { useEffect, useState, Component, ReactNode } from 'react'
 import UpdateNotification from '@/components/UpdateNotification'
 import RouteLoader from '@/components/RouteLoader'
 import PrefetchRoutes from '@/components/PrefetchRoutes'
+import PullToRefresh from '@/components/PullToRefresh'
 
 // Error boundary for layout extras to prevent useContext errors
 class LayoutExtrasErrorBoundary extends Component<
@@ -45,6 +46,7 @@ export default function ClientOnlyLayoutExtras() {
   if (!mounted) return null
   return (
     <LayoutExtrasErrorBoundary>
+      <PullToRefresh />
       <UpdateNotification />
       <RouteLoader />
       <PrefetchRoutes />

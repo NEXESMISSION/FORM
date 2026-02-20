@@ -1,10 +1,16 @@
 'use client'
 
 import { useState, useEffect, useCallback, useRef } from 'react'
+import dynamic from 'next/dynamic'
 import { useRouter } from 'next/navigation'
 import { supabase } from '@/lib/supabase'
 import toast from 'react-hot-toast'
 import { Save, ArrowRight, ArrowLeft, Mic, MicOff, Trash2, Loader2 } from 'lucide-react'
+
+const OSMLandMapPicker = dynamic(
+  () => import('@/components/OSMLandMapPicker'),
+  { ssr: false, loading: () => <div className="h-[280px] rounded-lg bg-gray-100 animate-pulse flex items-center justify-center text-gray-500">جاري تحميل الخريطة...</div> }
+)
 
 const STORAGE_KEY_PREFIX = 'housing_form_draft_'
 
@@ -594,6 +600,11 @@ export default function HousingApplicationForm() {
           <p className="text-base font-medium text-gray-700 mb-1">تطبيق برنامج السكن الاقتصادي السريع</p>
           <p className="text-gray-600 text-sm mb-2">تهدف هذه الاستمارة إلى دراسة وضعيتكم السكنية والمالية بدقة، قصد اقتراح الحل السكني الأنسب لكم.</p>
           <p className="text-primary-600 text-xs font-medium">يتم حفظ تقدّمك تلقائياً — يمكنك إكمال الاستمارة لاحقاً من حيث توقّفت.</p>
+          <p className="text-xs text-gray-500 mt-2 flex items-center gap-3 flex-wrap">
+            <span className="inline-flex items-center gap-1"><span className="text-red-600 font-bold">*</span> حقل مطلوب</span>
+            <span className="text-gray-400">—</span>
+            <span className="text-gray-500">(اختياري) يمكن تركه فارغاً</span>
+          </p>
         </div>
 
         {/* Progress — bar + section label only */}
@@ -624,7 +635,7 @@ export default function HousingApplicationForm() {
             <h2 className="text-base font-bold text-gray-900 pb-3 border-b border-gray-100">1️⃣ المعطيات الشخصية</h2>
             <div className="space-y-4">
               <div>
-                <label className="form-label">الاسم واللقب</label>
+                <label className="form-label form-label-required">الاسم واللقب</label>
                 <input 
                   ref={(el) => { fieldRefs.current['full_name'] = el }}
                   type="text" 
@@ -634,7 +645,7 @@ export default function HousingApplicationForm() {
                 />
               </div>
               <div>
-                <label className="form-label">رقم بطاقة التعريف الوطنية</label>
+                <label className="form-label form-label-required">رقم بطاقة التعريف الوطنية</label>
                 <input 
                   ref={(el) => { fieldRefs.current['national_id'] = el }}
                   type="text" 
@@ -644,7 +655,7 @@ export default function HousingApplicationForm() {
                 />
               </div>
               <div>
-                <label className="form-label">تاريخ الولادة</label>
+                <label className="form-label form-label-required">تاريخ الولادة</label>
                 <input 
                   ref={(el) => { fieldRefs.current['date_of_birth'] = el }}
                   type="date" 
@@ -654,7 +665,7 @@ export default function HousingApplicationForm() {
                 />
               </div>
               <div>
-                <label className="form-label">الحالة الاجتماعية</label>
+                <label className="form-label form-label-required">الحالة الاجتماعية</label>
                 <select 
                   ref={(el) => { fieldRefs.current['marital_status'] = el }}
                   value={formData.marital_status || ''} 
@@ -669,7 +680,7 @@ export default function HousingApplicationForm() {
                 </select>
               </div>
               <div>
-                <label className="form-label">عدد أفراد العائلة</label>
+                <label className="form-label form-label-required">عدد أفراد العائلة</label>
                 <input 
                   ref={(el) => { fieldRefs.current['family_count'] = el }}
                   type="number" 
@@ -680,11 +691,11 @@ export default function HousingApplicationForm() {
                 />
               </div>
               <div>
-                <label className="form-label">أعمار الأطفال (إن وجدوا)</label>
+                <label className="form-label form-label-optional">أعمار الأطفال (إن وجدوا)</label>
                 <input type="text" value={formData.children_ages || ''} onChange={(e) => updateFormData('children_ages', e.target.value)} className="form-input" placeholder="مثال: 5، 8، 12" />
               </div>
               <div>
-                <label className="form-label">رقم الهاتف</label>
+                <label className="form-label form-label-required">رقم الهاتف</label>
                 <input 
                   ref={(el) => { fieldRefs.current['phone'] = el }}
                   type="tel" 
@@ -694,7 +705,7 @@ export default function HousingApplicationForm() {
                 />
               </div>
               <div>
-                <label className="form-label">البريد الإلكتروني (اختياري)</label>
+                <label className="form-label form-label-optional">البريد الإلكتروني</label>
                 <input 
                   ref={(el) => { fieldRefs.current['email'] = el }}
                   type="email" 
@@ -704,7 +715,7 @@ export default function HousingApplicationForm() {
                 />
               </div>
               <div>
-                <label className="form-label">العنوان الحالي (ولاية)</label>
+                <label className="form-label form-label-required">العنوان الحالي (ولاية)</label>
                 <select 
                   ref={(el) => { fieldRefs.current['current_address'] = el }}
                   value={formData.current_address || ''} 
@@ -726,7 +737,7 @@ export default function HousingApplicationForm() {
           <div className="space-y-6">
             <h2 className="text-xl font-bold border-b pb-2">2️⃣ الوضعية المهنية</h2>
             <div>
-              <label className="form-label">الوضعية المهنية:</label>
+              <label className="form-label form-label-required">الوضعية المهنية</label>
               <select 
                 ref={(el) => { fieldRefs.current['employment_status'] = el }}
                 value={formData.employment_status || ''} 
@@ -742,7 +753,7 @@ export default function HousingApplicationForm() {
               </select>
             </div>
             <div>
-              <label className="form-label">قطاع العمل (عمومي / خاص / غير منظم)</label>
+              <label className="form-label form-label-required">قطاع العمل (عمومي / خاص / غير منظم)</label>
               <select 
                 ref={(el) => { fieldRefs.current['work_sector'] = el }}
                 value={formData.work_sector || ''} 
@@ -756,7 +767,7 @@ export default function HousingApplicationForm() {
               </select>
             </div>
             <div>
-              <label className="form-label">الدخل الشهري الصافي التقريبي</label>
+              <label className="form-label form-label-required">الدخل الشهري الصافي التقريبي</label>
               <input 
                 ref={(el) => { fieldRefs.current['net_monthly_income'] = el }}
                 type="number" 
@@ -768,7 +779,7 @@ export default function HousingApplicationForm() {
               />
             </div>
             <div>
-              <label className="form-label">هل الدخل قار؟ (نعم / لا)</label>
+              <label className="form-label form-label-required">هل الدخل قار؟ (نعم / لا)</label>
               <select 
                 ref={(el) => { fieldRefs.current['income_stable'] = el }}
                 value={formData.income_stable || ''} 
@@ -781,11 +792,11 @@ export default function HousingApplicationForm() {
               </select>
             </div>
             <div>
-              <label className="form-label">مداخيل إضافية (إن وجدت)</label>
+              <label className="form-label form-label-optional">مداخيل إضافية (إن وجدت)</label>
               <input type="text" value={formData.extra_income || ''} onChange={(e) => updateFormData('extra_income', e.target.value)} className="form-input" placeholder="اختياري" />
             </div>
             <div>
-              <label className="form-label">المهارات (اختياري)</label>
+              <label className="form-label form-label-optional">المهارات</label>
               <textarea 
                 value={formData.skills || ''} 
                 onChange={(e) => updateFormData('skills', e.target.value)} 
@@ -802,7 +813,7 @@ export default function HousingApplicationForm() {
           <div className="space-y-6">
             <h2 className="text-xl font-bold border-b pb-2">3️⃣ الوضعية المالية</h2>
             <div>
-              <label className="form-label">هل لديك التزامات مالية حالية؟ (قروض / كراء / أخرى)</label>
+              <label className="form-label form-label-required">هل لديك التزامات مالية حالية؟ (قروض / كراء / أخرى)</label>
               <select 
                 ref={(el) => { fieldRefs.current['has_financial_obligations'] = el }}
                 value={formData.has_financial_obligations || ''} 
@@ -815,7 +826,7 @@ export default function HousingApplicationForm() {
               </select>
             </div>
             <div>
-              <label className="form-label">القيمة الجملية للالتزامات الشهرية (د.ت)</label>
+              <label className="form-label form-label-required">القيمة الجملية للالتزامات الشهرية (د.ت)</label>
               <input 
                 ref={(el) => { fieldRefs.current['total_monthly_obligations'] = el }}
                 type="number" 
@@ -827,7 +838,7 @@ export default function HousingApplicationForm() {
               />
             </div>
             <div>
-              <label className="form-label">القدرة القصوى على الدفع الشهري للسكن (د.ت)</label>
+              <label className="form-label form-label-required">القدرة القصوى على الدفع الشهري للسكن (د.ت)</label>
               <input 
                 ref={(el) => { fieldRefs.current['max_monthly_payment'] = el }}
                 type="number" 
@@ -839,7 +850,7 @@ export default function HousingApplicationForm() {
               />
             </div>
             <div>
-              <label className="form-label">هل يمكنك توفير تسبقة في حدود 20%؟ (نعم / لا / جزئياً)</label>
+              <label className="form-label form-label-required">هل يمكنك توفير تسبقة في حدود 20%؟ (نعم / لا / جزئياً)</label>
               <select 
                 ref={(el) => { fieldRefs.current['can_save_20_percent'] = el }}
                 value={formData.can_save_20_percent || ''} 
@@ -853,7 +864,7 @@ export default function HousingApplicationForm() {
               </select>
             </div>
             <div>
-              <label className="form-label">القيمة التقريبية للتسبقة المتوفرة (د.ت)</label>
+              <label className="form-label form-label-optional">القيمة التقريبية للتسبقة المتوفرة (د.ت)</label>
               <input type="number" min={0} step={0.01} value={formData.down_payment_value ?? ''} onChange={(e) => updateFormData('down_payment_value', e.target.value === '' ? undefined : parseFloat(e.target.value))} className="form-input" />
             </div>
           </div>
@@ -864,7 +875,7 @@ export default function HousingApplicationForm() {
           <div className="space-y-6">
             <h2 className="text-xl font-bold border-b pb-2">4️⃣ الوضعية السكنية الحالية</h2>
             <div>
-              <label className="form-label">نوع السكن الحالي:</label>
+              <label className="form-label form-label-required">نوع السكن الحالي</label>
               <select 
                 ref={(el) => { fieldRefs.current['current_housing_type'] = el }}
                 value={formData.current_housing_type || ''} 
@@ -879,15 +890,29 @@ export default function HousingApplicationForm() {
               </select>
             </div>
             <div>
-              <label className="form-label">مدة الإقامة في السكن الحالي</label>
-              <input type="text" value={formData.current_residence_duration || ''} onChange={(e) => updateFormData('current_residence_duration', e.target.value)} className="form-input" placeholder="مثال: 3 سنوات" />
+              <label className="form-label form-label-optional">مدة الإقامة في السكن الحالي</label>
+              <select
+                value={formData.current_residence_duration || ''}
+                onChange={(e) => updateFormData('current_residence_duration', e.target.value)}
+                className="form-input"
+              >
+                <option value="">اختر...</option>
+                <option value="أقل من سنة">أقل من سنة</option>
+                <option value="سنة">سنة</option>
+                <option value="سنتين">سنتين</option>
+                <option value="3 سنوات">3 سنوات</option>
+                <option value="5 سنوات">5 سنوات</option>
+                <option value="7 سنوات">7 سنوات</option>
+                <option value="10 سنوات">10 سنوات</option>
+                <option value="أكثر من 10 سنوات">أكثر من 10 سنوات</option>
+              </select>
             </div>
             <div>
-              <label className="form-label">قيمة الكراء (إن وجد) (د.ت)</label>
+              <label className="form-label form-label-optional">قيمة الكراء (إن وجد) (د.ت)</label>
               <input type="number" min={0} value={formData.current_rent_value ?? ''} onChange={(e) => updateFormData('current_rent_value', e.target.value === '' ? undefined : parseFloat(e.target.value))} className="form-input" />
             </div>
             <div>
-              <label className="form-label">أبرز المشاكل (اختر ما ينطبق)</label>
+              <label className="form-label form-label-optional">أبرز المشاكل (اختر ما ينطبق)</label>
               <div className="space-y-2">
                 {['غلاء الكراء', 'ضيق المساحة', 'خطر الإخلاء', 'بعد السكن عن العمل', 'أخرى'].map((p) => (
                   <label key={p} className="flex items-center gap-2">
@@ -905,7 +930,7 @@ export default function HousingApplicationForm() {
           <div className="space-y-6">
             <h2 className="text-xl font-bold border-b pb-2">5️⃣ العقار</h2>
             <div>
-              <label className="form-label">هل تملك أرضاً صالحة للبناء؟</label>
+              <label className="form-label form-label-required">هل تملك أرضاً صالحة للبناء؟</label>
               <select 
                 ref={(el) => { fieldRefs.current['owns_land'] = el }}
                 value={formData.owns_land || ''} 
@@ -926,21 +951,34 @@ export default function HousingApplicationForm() {
                 <p className="text-sm font-semibold text-gray-800 mt-4 mb-2">🔹 تفاصيل الأرض</p>
                 <div className="grid md:grid-cols-2 gap-4">
                   <div className="md:col-span-2">
-                    <label className="form-label">موقع الأرض بالتفصيل (ولاية / معتمدية / عمادة)</label>
+                    <label className="form-label form-label-required">موقع الأرض بالتفصيل (ولاية / معتمدية / عمادة)</label>
                     <input 
                       ref={(el) => { fieldRefs.current['land_location'] = el }}
                       type="text" 
                       value={formData.land_location || ''} 
                       onChange={(e) => updateFormData('land_location', e.target.value)} 
                       className="form-input" 
+                      placeholder="يمكن الكتابة أو اختيار الموقع على الخريطة أدناه"
                     />
                   </div>
                   <div className="md:col-span-2">
-                    <label className="form-label">عنوان تقريبي أو نقطة GPS (اختياري)</label>
-                    <input type="text" value={formData.land_address_gps || ''} onChange={(e) => updateFormData('land_address_gps', e.target.value)} className="form-input" placeholder="اختياري" />
+                    <label className="form-label form-label-optional">اختيار الموقع على الخريطة (OpenStreetMap)</label>
+                    <OSMLandMapPicker
+                      value={formData.land_address_gps || ''}
+                      onChange={(gps, locationLabel) => {
+                        updateFormData('land_address_gps', gps)
+                        if (locationLabel) updateFormData('land_location', locationLabel)
+                      }}
+                      locationText={formData.land_location}
+                      className="mt-1"
+                    />
+                  </div>
+                  <div className="md:col-span-2">
+                    <label className="form-label form-label-optional">إحداثيات يدوياً (اختياري)</label>
+                    <input type="text" value={formData.land_address_gps || ''} onChange={(e) => updateFormData('land_address_gps', e.target.value)} className="form-input" placeholder="مثال: 36.8065, 10.1815" />
                   </div>
                   <div>
-                    <label className="form-label">مساحة الأرض بالمتر المربع</label>
+                    <label className="form-label form-label-required">مساحة الأرض بالمتر المربع</label>
                     <input 
                       ref={(el) => { fieldRefs.current['land_area_sqm'] = el }}
                       type="number" 
@@ -951,7 +989,7 @@ export default function HousingApplicationForm() {
                     />
                   </div>
                   <div>
-                    <label className="form-label">طبيعة الأرض</label>
+                    <label className="form-label form-label-required">طبيعة الأرض</label>
                     <select 
                       ref={(el) => { fieldRefs.current['land_nature'] = el }}
                       value={formData.land_nature || ''} 
@@ -965,7 +1003,7 @@ export default function HousingApplicationForm() {
                     </select>
                   </div>
                   <div>
-                    <label className="form-label">نوع الملكية</label>
+                    <label className="form-label form-label-required">نوع الملكية</label>
                     <select 
                       ref={(el) => { fieldRefs.current['land_ownership_type'] = el }}
                       value={formData.land_ownership_type || ''} 
@@ -979,7 +1017,7 @@ export default function HousingApplicationForm() {
                     </select>
                   </div>
                   <div>
-                    <label className="form-label">هل الأرض مسجلة بالرسم العقاري؟ (نعم / لا)</label>
+                    <label className="form-label form-label-optional">هل الأرض مسجلة بالرسم العقاري؟ (نعم / لا)</label>
                     <select value={formData.land_registered || ''} onChange={(e) => updateFormData('land_registered', e.target.value)} className="form-input">
                       <option value="">اختر...</option>
                       <option value="نعم">نعم</option>
@@ -987,7 +1025,7 @@ export default function HousingApplicationForm() {
                     </select>
                   </div>
                   <div>
-                    <label className="form-label">هل تتوفر وثيقة ملكية أو عقد شراء؟ (نعم / لا)</label>
+                    <label className="form-label form-label-optional">هل تتوفر وثيقة ملكية أو عقد شراء؟ (نعم / لا)</label>
                     <select value={formData.has_ownership_doc || ''} onChange={(e) => updateFormData('has_ownership_doc', e.target.value)} className="form-input">
                       <option value="">اختر...</option>
                       <option value="نعم">نعم</option>
@@ -998,7 +1036,7 @@ export default function HousingApplicationForm() {
                     <p className="text-sm font-semibold text-gray-800 mt-4 mb-2">🔹 الوضعية القانونية والإدارية</p>
                   </div>
                   <div>
-                    <label className="form-label">هل توجد رخصة بناء حالياً؟ (نعم / لا)</label>
+                    <label className="form-label form-label-optional">هل توجد رخصة بناء حالياً؟ (نعم / لا)</label>
                     <select value={formData.has_building_permit || ''} onChange={(e) => updateFormData('has_building_permit', e.target.value)} className="form-input">
                       <option value="">اختر...</option>
                       <option value="نعم">نعم</option>
@@ -1007,7 +1045,7 @@ export default function HousingApplicationForm() {
                   </div>
                   {formData.has_building_permit === 'لا' && (
                     <div>
-                      <label className="form-label">إذا لا: هل ترغب أن تتولى الشركة إعداد ملف الرخصة؟ (نعم / لا)</label>
+                      <label className="form-label form-label-optional">إذا لا: هل ترغب أن تتولى الشركة إعداد ملف الرخصة؟ (نعم / لا)</label>
                       <select value={formData.company_handle_permit || ''} onChange={(e) => updateFormData('company_handle_permit', e.target.value)} className="form-input">
                         <option value="">اختر...</option>
                         <option value="نعم">نعم</option>
@@ -1016,7 +1054,7 @@ export default function HousingApplicationForm() {
                     </div>
                   )}
                   <div>
-                    <label className="form-label">هل توجد قيود قانونية أو نزاع على الأرض؟ (نعم / لا)</label>
+                    <label className="form-label form-label-optional">هل توجد قيود قانونية أو نزاع على الأرض؟ (نعم / لا)</label>
                     <select value={formData.land_legal_issues || ''} onChange={(e) => updateFormData('land_legal_issues', e.target.value)} className="form-input">
                       <option value="">اختر...</option>
                       <option value="نعم">نعم</option>
@@ -1027,7 +1065,7 @@ export default function HousingApplicationForm() {
                     <p className="text-sm font-semibold text-gray-800 mt-4 mb-2">🔹 تفاصيل المشروع المطلوب</p>
                   </div>
                   <div>
-                    <label className="form-label">نوع المسكن المرغوب</label>
+                    <label className="form-label form-label-required">نوع المسكن المرغوب</label>
                     <select value={formData.desired_housing_type_land || ''} onChange={(e) => updateFormData('desired_housing_type_land', e.target.value)} className="form-input">
                       <option value="">اختر...</option>
                       <option value="اقتصادي أساسي">اقتصادي أساسي</option>
@@ -1036,7 +1074,7 @@ export default function HousingApplicationForm() {
                     </select>
                   </div>
                   <div>
-                    <label className="form-label">هل ترغب في تصميم خاص أم نموذج جاهز؟</label>
+                    <label className="form-label form-label-required">هل ترغب في تصميم خاص أم نموذج جاهز؟</label>
                     <select value={formData.custom_design_or_ready || ''} onChange={(e) => updateFormData('custom_design_or_ready', e.target.value)} className="form-input">
                       <option value="">اختر...</option>
                       <option value="تصميم خاص">تصميم خاص</option>
@@ -1044,11 +1082,11 @@ export default function HousingApplicationForm() {
                     </select>
                   </div>
                   <div>
-                    <label className="form-label">عدد الغرف المطلوبة</label>
+                    <label className="form-label form-label-optional">عدد الغرف المطلوبة</label>
                     <input type="number" min={0} value={formData.rooms_count_land ?? ''} onChange={(e) => updateFormData('rooms_count_land', e.target.value === '' ? undefined : parseInt(e.target.value, 10))} className="form-input" />
                   </div>
                   <div>
-                    <label className="form-label">هل ترغب في طابق إضافي مستقبلاً؟ (نعم / لا)</label>
+                    <label className="form-label form-label-optional">هل ترغب في طابق إضافي مستقبلاً؟ (نعم / لا)</label>
                     <select value={formData.want_future_floor || ''} onChange={(e) => updateFormData('want_future_floor', e.target.value)} className="form-input">
                       <option value="">اختر...</option>
                       <option value="نعم">نعم</option>
@@ -1057,7 +1095,7 @@ export default function HousingApplicationForm() {
                   </div>
                   <div className="md:col-span-2">
                     <p className="text-sm font-semibold text-gray-800 mt-4 mb-2">🔹 نوع خدمة الشركة</p>
-                    <label className="form-label">اختر الخدمة المطلوبة</label>
+                    <label className="form-label form-label-optional">اختر الخدمة المطلوبة</label>
                     <select value={formData.service_type || ''} onChange={(e) => updateFormData('service_type', e.target.value)} className="form-input">
                       <option value="">اختر...</option>
                       <option value="بناء الهيكل فقط (Gros œuvre)">بناء الهيكل فقط (Gros œuvre)</option>
@@ -1069,7 +1107,7 @@ export default function HousingApplicationForm() {
                     <p className="text-sm font-semibold text-gray-800 mt-4 mb-2">🔹 التمويل</p>
                   </div>
                   <div>
-                    <label className="form-label">هل ستدفع التسبقة (20%) مباشرة؟ (نعم / لا / جزئياً)</label>
+                    <label className="form-label form-label-optional">هل ستدفع التسبقة (20%) مباشرة؟ (نعم / لا / جزئياً)</label>
                     <select value={formData.pay_down_direct || ''} onChange={(e) => updateFormData('pay_down_direct', e.target.value)} className="form-input">
                       <option value="">اختر...</option>
                       <option value="نعم">نعم</option>
@@ -1078,7 +1116,7 @@ export default function HousingApplicationForm() {
                     </select>
                   </div>
             <div>
-              <label className="form-label">هل ترغب في تقسيط تكلفة البناء فقط؟ (نعم / لا)</label>
+              <label className="form-label form-label-required">هل ترغب في تقسيط تكلفة البناء فقط؟ (نعم / لا)</label>
               <select value={formData.want_installment_building_only || ''} onChange={(e) => updateFormData('want_installment_building_only', e.target.value)} className="form-input">
                       <option value="">اختر...</option>
                       <option value="نعم">نعم</option>
@@ -1086,7 +1124,7 @@ export default function HousingApplicationForm() {
                     </select>
                   </div>
                   <div>
-                    <label className="form-label">مدة التقسيط المقترحة</label>
+                    <label className="form-label form-label-required">مدة التقسيط المقترحة</label>
                     <select value={formData.installment_years_land || ''} onChange={(e) => updateFormData('installment_years_land', e.target.value)} className="form-input">
                       <option value="">اختر...</option>
                       <option value="5">5 سنوات</option>
@@ -1103,7 +1141,7 @@ export default function HousingApplicationForm() {
 
             {formData.owns_land === 'لا' && (
               <div>
-                <label className="form-label">هل ترغب أن توفّر الشركة العقار كاملاً؟ (مسار شراء أرض + بناء)</label>
+                <label className="form-label form-label-optional">هل ترغب أن توفّر الشركة العقار كاملاً؟ (مسار شراء أرض + بناء)</label>
                 <select value={formData.company_provide_full_property || ''} onChange={(e) => updateFormData('company_provide_full_property', e.target.value)} className="form-input">
                   <option value="">اختر...</option>
                   <option value="نعم">نعم</option>
@@ -1121,7 +1159,7 @@ export default function HousingApplicationForm() {
             <p className="text-sm text-gray-600 mb-4">يرجى من المترشح اختيار نوع السكن الذي يتناسب مع احتياجاته العائلية وقدرته التمويلية:</p>
             
             <div>
-              <label className="form-label">نوع السكن *</label>
+              <label className="form-label form-label-required">نوع السكن</label>
               <select 
                 ref={(el) => { fieldRefs.current['housing_type_model'] = el }}
                 value={formData.housing_type_model || ''} 
@@ -1139,7 +1177,7 @@ export default function HousingApplicationForm() {
             </div>
 
             <div>
-              <label className="form-label">النوع: فردي / جماعي *</label>
+              <label className="form-label form-label-required">النوع: فردي / جماعي</label>
               <select 
                 ref={(el) => { fieldRefs.current['housing_individual_collective'] = el }}
                 value={formData.housing_individual_collective || ''} 
@@ -1154,7 +1192,7 @@ export default function HousingApplicationForm() {
             </div>
 
             <div>
-              <label className="form-label">المساحة الجملية المرغوبة *</label>
+              <label className="form-label form-label-required">المساحة الجملية المرغوبة</label>
               <div className="space-y-2" ref={(el) => { fieldRefs.current['housing_area'] = el as any }}>
                 <div className="grid grid-cols-2 gap-2">
                   {['60', '80', '100', 'أكثر من 100'].map((area) => {
@@ -1196,7 +1234,7 @@ export default function HousingApplicationForm() {
             </div>
 
             <div>
-              <label className="form-label">عدد الغرف المطلوبة</label>
+              <label className="form-label form-label-optional">عدد الغرف المطلوبة</label>
               <div className="grid grid-cols-2 gap-2 mt-2">
                 {['غرفة نوم واحدة', 'غرفتان', 'ثلاث غرف', 'أكثر'].map((rooms) => (
                   <label key={rooms} className="flex items-center gap-2 p-3 rounded-xl border border-gray-200 hover:border-primary-400 cursor-pointer">
@@ -1215,7 +1253,7 @@ export default function HousingApplicationForm() {
             </div>
 
             <div>
-              <label className="form-label">مكونات إضافية مرغوبة</label>
+              <label className="form-label form-label-optional">مكونات إضافية مرغوبة</label>
               <div className="space-y-2 mt-2">
                 {['مطبخ مستقل', 'شرفة', 'حديقة صغيرة', 'مكان لوقوف السيارة', 'إمكانية التوسعة لاحقاً'].map((comp) => (
                   <label key={comp} className="flex items-center gap-2 p-2 rounded-xl border border-gray-100 hover:bg-gray-50 cursor-pointer">
@@ -1236,7 +1274,7 @@ export default function HousingApplicationForm() {
             </div>
 
             <div>
-              <label className="form-label">الهدف من السكن</label>
+              <label className="form-label form-label-optional">الهدف من السكن</label>
               <div className="space-y-2 mt-2">
                 {['سكن رئيسي', 'استثمار', 'سكن لعائلة مستقبلية'].map((purpose) => (
                   <label key={purpose} className="flex items-center gap-2 p-3 rounded-xl border border-gray-200 hover:border-primary-400 cursor-pointer">
@@ -1255,7 +1293,7 @@ export default function HousingApplicationForm() {
             </div>
 
             <div>
-              <label className="form-label">هل تقبل بتعديل المساحة حسب قدرتك المالية؟ (نعم / لا)</label>
+              <label className="form-label form-label-optional">هل تقبل بتعديل المساحة حسب قدرتك المالية؟ (نعم / لا)</label>
               <select value={formData.accept_area_adjustment || ''} onChange={(e) => updateFormData('accept_area_adjustment', e.target.value)} className="form-input">
                 <option value="">اختر...</option>
                 <option value="نعم">نعم</option>
@@ -1271,7 +1309,7 @@ export default function HousingApplicationForm() {
             <h2 className="text-xl font-bold border-b pb-2">7️⃣ مدة التقسيط وطريقة الدفع</h2>
             
             <div>
-              <label className="form-label">نوع الدفع *</label>
+              <label className="form-label form-label-required">نوع الدفع</label>
               <select 
                 ref={(el) => { fieldRefs.current['payment_type'] = el }}
                 value={formData.payment_type || ''} 
@@ -1288,7 +1326,7 @@ export default function HousingApplicationForm() {
             {formData.payment_type === 'تقسيط' && (
               <>
                 <div>
-                  <label className="form-label">النسبة المدفوعة مسبقاً (%)</label>
+                  <label className="form-label form-label-optional">النسبة المدفوعة مسبقاً (%)</label>
                   <input 
                     type="number" 
                     min={1} 
@@ -1303,7 +1341,7 @@ export default function HousingApplicationForm() {
                 </div>
 
                 <div>
-                  <label className="form-label">مدة التقسيط (سنوات) *</label>
+                  <label className="form-label form-label-required">مدة التقسيط (سنوات)</label>
                   <select 
                     ref={(el) => { fieldRefs.current['installment_period'] = el }}
                     value={formData.installment_period || ''} 
@@ -1335,7 +1373,7 @@ export default function HousingApplicationForm() {
           <div className="space-y-6">
             <h2 className="text-xl font-bold border-b pb-2">8️⃣ الشراكة مع الدولة والسكن الاجتماعي</h2>
             <div>
-              <label className="form-label">هل توافق على إحالة ملفك إلى هياكل الدولة أو ديوان السكن في حال استوجب الأمر؟</label>
+              <label className="form-label form-label-optional">هل توافق على إحالة ملفك إلى هياكل الدولة أو ديوان السكن في حال استوجب الأمر؟</label>
               <select value={formData.agree_state_referral || ''} onChange={(e) => updateFormData('agree_state_referral', e.target.value)} className="form-input">
                 <option value="">اختر...</option>
                 <option value="نعم">نعم</option>
@@ -1343,7 +1381,7 @@ export default function HousingApplicationForm() {
               </select>
             </div>
             <div>
-              <label className="form-label">هل سبق لك الانتفاع ببرنامج سكن اجتماعي أو FOPROLOS؟</label>
+              <label className="form-label form-label-optional">هل سبق لك الانتفاع ببرنامج سكن اجتماعي أو FOPROLOS؟</label>
               <select value={formData.previous_social_housing || ''} onChange={(e) => updateFormData('previous_social_housing', e.target.value)} className="form-input">
                 <option value="">اختر...</option>
                 <option value="نعم">نعم</option>
@@ -1351,7 +1389,7 @@ export default function HousingApplicationForm() {
               </select>
             </div>
             <div>
-              <label className="form-label">هل أنت مسجّل لدى الشؤون الاجتماعية أو ضمن قائمة الأولويات؟</label>
+              <label className="form-label form-label-optional">هل أنت مسجّل لدى الشؤون الاجتماعية أو ضمن قائمة الأولويات؟</label>
               <select value={formData.registered_social_affairs || ''} onChange={(e) => updateFormData('registered_social_affairs', e.target.value)} className="form-input">
                 <option value="">اختر...</option>
                 <option value="نعم">نعم</option>
@@ -1359,7 +1397,7 @@ export default function HousingApplicationForm() {
               </select>
             </div>
             <div>
-              <label className="form-label">هل تقبل بحلول سكن اجتماعي أو اقتصادي مدعّم؟</label>
+              <label className="form-label form-label-optional">هل تقبل بحلول سكن اجتماعي أو اقتصادي مدعّم؟</label>
               <select value={formData.accept_social_economic_housing || ''} onChange={(e) => updateFormData('accept_social_economic_housing', e.target.value)} className="form-input">
                 <option value="">اختر...</option>
                 <option value="نعم">نعم</option>
@@ -1367,7 +1405,7 @@ export default function HousingApplicationForm() {
               </select>
             </div>
             <div>
-              <label className="form-label">في حال قبول ملفك ضمن برنامج السكن الاجتماعي، هل توافق على المتابعة الإدارية عبر المنصة؟</label>
+              <label className="form-label form-label-optional">في حال قبول ملفك ضمن برنامج السكن الاجتماعي، هل توافق على المتابعة الإدارية عبر المنصة؟</label>
               <select value={formData.accept_followup_via_platform || ''} onChange={(e) => updateFormData('accept_followup_via_platform', e.target.value)} className="form-input">
                 <option value="">اختر...</option>
                 <option value="نعم">نعم</option>
@@ -1383,7 +1421,7 @@ export default function HousingApplicationForm() {
             <h2 className="text-xl font-bold border-b pb-2">9️⃣ معلومات إضافية</h2>
             
             <div>
-              <label className="form-label">اختر طريقة الشرح</label>
+              <label className="form-label form-label-optional">اختر طريقة الشرح</label>
               <div className="grid grid-cols-2 gap-3 mb-4">
                 <button
                   type="button"
@@ -1412,7 +1450,7 @@ export default function HousingApplicationForm() {
 
             {(formData.additional_info_type === 'text' || !formData.additional_info_type) && (
               <div>
-                <label className="form-label">صف وضعيتك أو مشكلتك السكنية بإيجاز</label>
+                <label className="form-label form-label-optional">صف وضعيتك أو مشكلتك السكنية بإيجاز</label>
                 <textarea 
                   rows={5} 
                   value={formData.additional_info || ''} 
