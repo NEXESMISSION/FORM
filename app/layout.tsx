@@ -3,7 +3,7 @@ import { Suspense } from 'react'
 import './globals.css'
 import { Toaster } from 'react-hot-toast'
 import ClientOnlyLayoutExtras from '@/components/ClientOnlyLayoutExtras'
-import ChatWidget from '@/components/ChatWidget'
+import ChatWrapper from '@/components/ChatWrapper'
 import { SITE_URL, SEO_DEFAULTS, absoluteUrl } from '@/lib/seo'
 
 export const metadata: Metadata = {
@@ -148,7 +148,7 @@ export default function RootLayout({
           <ClientOnlyLayoutExtras />
         </Suspense>
         {children}
-        <ChatWidget />
+        <ChatWrapper />
         <Toaster
           position="top-center"
           toastOptions={{

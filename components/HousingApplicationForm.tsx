@@ -565,6 +565,13 @@ export default function HousingApplicationForm() {
   }
 
   const nextSection = () => {
+    const validation = validateForm()
+    if (!validation.isValid) {
+      setCurrentSection(validation.section)
+      toast.error(validation.message)
+      focusField(validation.field, validation.section)
+      return
+    }
     if (currentSection < TOTAL_SECTIONS) setCurrentSection(currentSection + 1)
     else handleSubmit()
   }
@@ -1168,11 +1175,12 @@ export default function HousingApplicationForm() {
                 required
               >
                 <option value="">اختر...</option>
-                <option value="شقة">شقة (APARTMENT)</option>
-                <option value="فيلا اقتصادية">فيلا اقتصادية (VILLA)</option>
-                <option value="مسكن فردي مستقل">مسكن فردي مستقل</option>
-                <option value="شقة ضمن عمارة">شقة ضمن عمارة (سكن جماعي)</option>
-                <option value="مسكن قابل للتوسعة">مسكن قابل للتوسعة مستقبلاً</option>
+                <option value="شقة">شقة</option>
+                <option value="مسكن فردي متقل">مسكن فردي متقل</option>
+                <option value="مسكن فردي قابل للتوسعة">مسكن فردي قابل للتوسعة</option>
+                <option value="مسكن فردي جماعي">مسكن فردي جماعي</option>
+                <option value="فيلا">فيلا</option>
+                <option value="مبنى سكني مكون من طابقين أفقيًا إما عموديًا">مبنى سكني مكون من طابقين أفقيًا إما عموديًا</option>
               </select>
             </div>
 
@@ -1255,7 +1263,7 @@ export default function HousingApplicationForm() {
             <div>
               <label className="form-label form-label-optional">مكونات إضافية مرغوبة</label>
               <div className="space-y-2 mt-2">
-                {['مطبخ مستقل', 'شرفة', 'حديقة صغيرة', 'مكان لوقوف السيارة', 'إمكانية التوسعة لاحقاً'].map((comp) => (
+                {['مطبخ مستقل', 'حديقة', 'مكان لوقوف السيارة', 'إمكانية التوسعة لاحقاً'].map((comp) => (
                   <label key={comp} className="flex items-center gap-2 p-2 rounded-xl border border-gray-100 hover:bg-gray-50 cursor-pointer">
                     <input 
                       type="checkbox" 
@@ -1276,7 +1284,7 @@ export default function HousingApplicationForm() {
             <div>
               <label className="form-label form-label-optional">الهدف من السكن</label>
               <div className="space-y-2 mt-2">
-                {['سكن رئيسي', 'استثمار', 'سكن لعائلة مستقبلية'].map((purpose) => (
+                {['سكن رئيسي', 'مسكن ثاني', 'استثمار', 'سكن لعائلة مستقبلية'].map((purpose) => (
                   <label key={purpose} className="flex items-center gap-2 p-3 rounded-xl border border-gray-200 hover:border-primary-400 cursor-pointer">
                     <input 
                       type="radio" 
@@ -1512,8 +1520,13 @@ export default function HousingApplicationForm() {
                         type="button"
                         onClick={async () => {
                           if (isRecording) {
-                            // Stop recording
+                            // Stop recording: requestData() flushes buffer so we get data in ondataavailable
                             if (mediaRecorder && mediaRecorder.state !== 'inactive') {
+                              try {
+                                if (typeof mediaRecorder.requestData === 'function') {
+                                  mediaRecorder.requestData()
+                                }
+                              } catch (_) {}
                               mediaRecorder.stop()
                             }
                             setIsRecording(false)
@@ -1599,6 +1612,8 @@ export default function HousingApplicationForm() {
                                   chunks.push(e.data)
                                 }
                               }
+                              // Shorter timeslice so we get data even for short recordings (e.g. under 1s)
+                              const timesliceMs = 250
                               
                               recorder.onerror = (e) => {
                                 console.error('Recording error:', e)
@@ -1620,7 +1635,7 @@ export default function HousingApplicationForm() {
                                   const audioBlob = new Blob(chunks, { type: finalMimeType })
                                   
                                   if (audioBlob.size === 0) {
-                                    toast.error('التسجيل فارغ. حاول مرة أخرى.')
+                                    toast.error('لم يُسجّل أي صوت. سجّل لمدة ثانية على الأقل ثم أوقف التسجيل.', { duration: 5000 })
                                     if (recordingStreamRef.current) {
                                       recordingStreamRef.current.getTracks().forEach(track => track.stop())
                                       recordingStreamRef.current = null
@@ -1646,18 +1661,20 @@ export default function HousingApplicationForm() {
                                       const { data: { publicUrl } } = supabase.storage.from('documents').getPublicUrl(fileName)
                                       updateFormData('additional_info_voice_url', publicUrl)
                                       toast.success('تم حفظ التسجيل بنجاح')
-                                      // Transcribe with OpenAI Whisper
+                                      // Transcribe with OpenAI Whisper (send file so we don't depend on public URL)
                                       setIsTranscribing(true)
                                       try {
+                                        const form = new FormData()
+                                        form.append('file', audioBlob, `audio.${extension}`)
                                         const trRes = await fetch('/api/transcribe', {
                                           method: 'POST',
-                                          headers: { 'Content-Type': 'application/json' },
-                                          body: JSON.stringify({ url: publicUrl }),
+                                          body: form,
                                         })
                                         const trData = await trRes.json()
-                                        if (trRes.ok && trData?.text) {
-                                          updateFormData('additional_info', trData.text)
-                                          toast.success('تم تحويل الصوت إلى نص (Whisper)')
+                                        if (trRes.ok && trData?.text !== undefined) {
+                                          const text = (trData.text || '').trim()
+                                          updateFormData('additional_info', text)
+                                          if (text) toast.success('تم تحويل الصوت إلى نص (Whisper)')
                                         } else if (!trRes.ok) {
                                           toast.error(trData?.error || 'فشل تحويل الصوت إلى نص')
                                         }
@@ -1686,7 +1703,7 @@ export default function HousingApplicationForm() {
                               }
                               
                               try {
-                                recorder.start(1000) // Collect data every second
+                                recorder.start(timesliceMs)
                                 setMediaRecorder(recorder)
                                 recordingStreamRef.current = stream
                                 setIsRecording(true)

@@ -33,6 +33,13 @@ const APP_STATUS_LABELS: Record<string, string> = {
   rejected: 'مرفوض',
 }
 
+const MARITAL_STATUS_LABELS: Record<string, string> = {
+  single: 'أعزب',
+  married: 'متزوج',
+  divorced: 'مطلق',
+  widowed: 'أرمل',
+}
+
 const PURCHASE_STATUS_LABELS: Record<string, string> = {
   pending: 'قيد المراجعة',
   in_progress: 'قيد المتابعة',
@@ -241,7 +248,7 @@ export default function AdminDashboard() {
   }, {})
 
   const housingTypeStats = applications.reduce((acc: Record<string, number>, app) => {
-    const type = app.desired_housing_type || 'غير محدد'
+    const type = app.housing_type_model || app.desired_housing_type || 'غير محدد'
     acc[type] = (acc[type] || 0) + 1
     return acc
   }, {})
@@ -316,8 +323,8 @@ export default function AdminDashboard() {
       a.net_monthly_income ?? '',
       a.maximum_budget ?? '',
       a.required_area ?? a.housing_area ?? '',
-      a.desired_housing_type || a.housing_type_model || '',
-      a.marital_status || '',
+      a.housing_type_model || a.desired_housing_type || '',
+      MARITAL_STATUS_LABELS[a.marital_status] || a.marital_status || '',
       a.number_of_children ?? '',
       a.created_at ? new Date(a.created_at).toLocaleDateString('ar-TN') : '',
     ])
@@ -1571,9 +1578,17 @@ export default function AdminDashboard() {
                   <div><dt className="text-gray-500">البريد</dt><dd className="font-medium text-gray-900">{showDetailApp.email || '—'}</dd></div>
                   <div><dt className="text-gray-500">رقم البطاقة</dt><dd className="font-medium text-gray-900">{showDetailApp.national_id || '—'}</dd></div>
                   <div><dt className="text-gray-500">تاريخ الولادة</dt><dd className="font-medium text-gray-900">{showDetailApp.date_of_birth ? new Date(showDetailApp.date_of_birth).toLocaleDateString('ar-TN') : '—'}</dd></div>
-                  <div><dt className="text-gray-500">الحالة الاجتماعية</dt><dd className="font-medium text-gray-900">{showDetailApp.marital_status || '—'}</dd></div>
+                  <div><dt className="text-gray-500">الحالة الاجتماعية</dt><dd className="font-medium text-gray-900">{MARITAL_STATUS_LABELS[showDetailApp.marital_status] || showDetailApp.marital_status || '—'}</dd></div>
                   <div><dt className="text-gray-500">عدد الأطفال</dt><dd className="font-medium text-gray-900">{showDetailApp.number_of_children ?? '—'}</dd></div>
+                  <div><dt className="text-gray-500">الهاتف</dt><dd className="font-medium text-gray-900">{showDetailApp.phone || '—'}</dd></div>
                   <div><dt className="text-gray-500">الولاية</dt><dd className="font-medium text-gray-900">{showDetailApp.governorate || showDetailApp.current_address || '—'}</dd></div>
+                </dl>
+              </div>
+              <div>
+                <h4 className="text-sm font-semibold text-gray-700 mb-2">الوضعية المهنية</h4>
+                <dl className="grid grid-cols-1 gap-2 text-sm">
+                  <div><dt className="text-gray-500">الوضعية المهنية</dt><dd className="font-medium text-gray-900">{showDetailApp.employment_status || '—'}</dd></div>
+                  <div><dt className="text-gray-500">قطاع العمل</dt><dd className="font-medium text-gray-900">{showDetailApp.work_sector || '—'}</dd></div>
                 </dl>
               </div>
               <div>
@@ -1585,11 +1600,22 @@ export default function AdminDashboard() {
                 </dl>
               </div>
               <div>
+                <h4 className="text-sm font-semibold text-gray-700 mb-2">السكن الحالي</h4>
+                <dl className="grid grid-cols-1 gap-2 text-sm">
+                  <div><dt className="text-gray-500">نوع السكن الحالي</dt><dd className="font-medium text-gray-900">{showDetailApp.current_housing_type || '—'}</dd></div>
+                  <div><dt className="text-gray-500">مدة الإقامة</dt><dd className="font-medium text-gray-900">{showDetailApp.current_residence_duration || '—'}</dd></div>
+                </dl>
+              </div>
+              <div>
                 <h4 className="text-sm font-semibold text-gray-700 mb-2">السكن المطلوب</h4>
                 <dl className="grid grid-cols-1 gap-2 text-sm">
+                  <div><dt className="text-gray-500">نوع السكن</dt><dd className="font-medium text-gray-900">{showDetailApp.housing_type_model || showDetailApp.desired_housing_type || '—'}</dd></div>
+                  <div><dt className="text-gray-500">فردي / جماعي</dt><dd className="font-medium text-gray-900">{showDetailApp.housing_individual_collective || '—'}</dd></div>
                   <div><dt className="text-gray-500">المساحة (م²)</dt><dd className="font-medium text-gray-900">{showDetailApp.required_area ?? showDetailApp.housing_area_custom ?? showDetailApp.housing_area ?? '—'}</dd></div>
-                  <div><dt className="text-gray-500">نوع السكن</dt><dd className="font-medium text-gray-900">{showDetailApp.desired_housing_type || showDetailApp.housing_type_model || '—'}</dd></div>
                   <div><dt className="text-gray-500">عدد الغرف</dt><dd className="font-medium text-gray-900">{showDetailApp.number_of_rooms ?? '—'}</dd></div>
+                  <div><dt className="text-gray-500">الهدف من السكن</dt><dd className="font-medium text-gray-900">{showDetailApp.housing_purpose || '—'}</dd></div>
+                  <div><dt className="text-gray-500">نوع الدفع</dt><dd className="font-medium text-gray-900">{showDetailApp.payment_type || '—'}</dd></div>
+                  {showDetailApp.payment_type === 'تقسيط' && <div><dt className="text-gray-500">مدة التقسيط</dt><dd className="font-medium text-gray-900">{showDetailApp.installment_period ?? '—'}</dd></div>}
                   {showDetailApp.skills && <div><dt className="text-gray-500">المهارات</dt><dd className="font-medium text-gray-900">{showDetailApp.skills}</dd></div>}
                 </dl>
               </div>

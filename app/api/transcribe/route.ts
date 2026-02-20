@@ -64,6 +64,12 @@ export async function POST(request: NextRequest) {
       )
     }
 
+    if (audioBuffer.length === 0) {
+      return NextResponse.json(
+        { error: 'الملف الصوتي فارغ. سجّل لمدة ثانية على الأقل ثم أعد المحاولة.' },
+        { status: 400 }
+      )
+    }
     if (audioBuffer.length > MAX_FILE_SIZE) {
       return NextResponse.json(
         { error: 'حجم الملف يتجاوز 25 ميجا. قلّل مدة التسجيل.' },
