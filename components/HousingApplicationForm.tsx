@@ -573,6 +573,11 @@ export default function HousingApplicationForm() {
     updateFormData('housing_problems', next)
   }
 
+  // Scroll to top of form when section changes (Next/Previous) so user sees the new section from the top
+  useEffect(() => {
+    formTopRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+  }, [currentSection])
+
   if (!hydrationDone) {
     return (
       <div className="max-w-4xl mx-auto px-4 py-8 flex justify-center">
