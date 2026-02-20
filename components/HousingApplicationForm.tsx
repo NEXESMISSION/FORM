@@ -4,7 +4,7 @@ import { useState, useEffect, useCallback, useRef } from 'react'
 import { useRouter } from 'next/navigation'
 import { supabase } from '@/lib/supabase'
 import toast from 'react-hot-toast'
-import { Save, ArrowRight, ArrowLeft, Mic, MicOff, Trash2 } from 'lucide-react'
+import { Save, ArrowRight, ArrowLeft, Mic, MicOff, Trash2, Loader2 } from 'lucide-react'
 
 const STORAGE_KEY_PREFIX = 'housing_form_draft_'
 
@@ -117,6 +117,7 @@ export default function HousingApplicationForm() {
   const [hydrationDone, setHydrationDone] = useState(false)
   const [isRecording, setIsRecording] = useState(false)
   const [recordingTime, setRecordingTime] = useState(0)
+  const [isTranscribing, setIsTranscribing] = useState(false)
   const [mediaRecorder, setMediaRecorder] = useState<MediaRecorder | null>(null)
   const recordingTimerRef = useRef<NodeJS.Timeout | null>(null)
   const audioRef = useRef<HTMLAudioElement | null>(null)
@@ -1422,10 +1423,10 @@ export default function HousingApplicationForm() {
                 <div className="rounded-xl border-2 border-gray-200 p-6">
                   {formData.additional_info_voice_url ? (
                     <div className="space-y-3">
-                      <div className="flex items-center justify-between">
+                      <div className="flex items-center justify-between gap-2 flex-wrap">
                         <span className="text-sm font-medium text-gray-700">تم تسجيل الصوت</span>
-                        <div className="flex gap-2">
-                          <audio ref={audioRef} src={formData.additional_info_voice_url} controls className="h-8" />
+                        <div className="flex gap-2 items-center">
+                          <audio ref={audioRef} src={formData.additional_info_voice_url} controls className="h-8 max-w-[180px] sm:max-w-none" />
                           <button
                             type="button"
                             onClick={async () => {
@@ -1436,6 +1437,7 @@ export default function HousingApplicationForm() {
                                 } catch (_) {}
                               }
                               updateFormData('additional_info_voice_url', undefined)
+                              updateFormData('additional_info', formData.additional_info_type === 'voice' ? undefined : formData.additional_info)
                             }}
                             className="p-2 rounded-lg bg-red-100 text-red-700 hover:bg-red-200"
                           >
@@ -1443,6 +1445,18 @@ export default function HousingApplicationForm() {
                           </button>
                         </div>
                       </div>
+                      {isTranscribing && (
+                        <p className="text-sm text-primary-600 flex items-center gap-2">
+                          <Loader2 className="w-4 h-4 animate-spin shrink-0" />
+                          جاري تحويل الصوت إلى نص (Whisper)...
+                        </p>
+                      )}
+                      {!isTranscribing && formData.additional_info && (
+                        <div className="rounded-lg bg-gray-50 border border-gray-200 p-3">
+                          <p className="text-xs font-medium text-gray-500 mb-1">النص المُستخرج (Whisper):</p>
+                          <p className="text-sm text-gray-800 whitespace-pre-wrap">{formData.additional_info}</p>
+                        </div>
+                      )}
                     </div>
                   ) : (
                     <div className="text-center space-y-4">
@@ -1589,6 +1603,27 @@ export default function HousingApplicationForm() {
                                       const { data: { publicUrl } } = supabase.storage.from('documents').getPublicUrl(fileName)
                                       updateFormData('additional_info_voice_url', publicUrl)
                                       toast.success('تم حفظ التسجيل بنجاح')
+                                      // Transcribe with OpenAI Whisper
+                                      setIsTranscribing(true)
+                                      try {
+                                        const trRes = await fetch('/api/transcribe', {
+                                          method: 'POST',
+                                          headers: { 'Content-Type': 'application/json' },
+                                          body: JSON.stringify({ url: publicUrl }),
+                                        })
+                                        const trData = await trRes.json()
+                                        if (trRes.ok && trData?.text) {
+                                          updateFormData('additional_info', trData.text)
+                                          toast.success('تم تحويل الصوت إلى نص (Whisper)')
+                                        } else if (!trRes.ok) {
+                                          toast.error(trData?.error || 'فشل تحويل الصوت إلى نص')
+                                        }
+                                      } catch (trErr) {
+                                        console.error('Transcribe error:', trErr)
+                                        toast.error('فشل تحويل الصوت إلى نص')
+                                      } finally {
+                                        setIsTranscribing(false)
+                                      }
                                     } else {
                                       console.error('Upload error:', uploadError)
                                       toast.error('فشل رفع التسجيل: ' + (uploadError?.message || 'خطأ غير معروف'))
