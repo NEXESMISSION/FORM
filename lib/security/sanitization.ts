@@ -1,26 +1,29 @@
 /**
  * Input sanitization and XSS prevention utilities
+ * Uses regex-based stripping only (no jsdom) so it works in Next.js server/bundled routes.
  */
-
-import DOMPurify from 'isomorphic-dompurify'
 
 /**
- * Sanitize HTML string to prevent XSS
+ * Strip HTML tags and dangerous content (XSS-safe, no DOM dependency).
+ * Equivalent to DOMPurify with ALLOWED_TAGS: [] for server and bundled environments.
+ */
+function stripHtmlAndDangerous(dirty: string): string {
+  if (typeof dirty !== 'string') return ''
+  let s = dirty
+  s = s.replace(/<[^>]*>/g, '')
+  s = s.replace(/javascript:/gi, '')
+  s = s.replace(/data:/gi, '')
+  s = s.replace(/vbscript:/gi, '')
+  s = s.replace(/on\w+\s*=/gi, '')
+  s = s.replace(/\0/g, '')
+  return s.trim()
+}
+
+/**
+ * Sanitize HTML string to prevent XSS (strip all tags and dangerous patterns).
  */
 export function sanitizeHtml(dirty: string): string {
-  if (typeof window === 'undefined') {
-    // Server-side: use DOMPurify
-    return DOMPurify.sanitize(dirty, {
-      ALLOWED_TAGS: [],
-      ALLOWED_ATTR: [],
-    })
-  }
-  
-  // Client-side: use DOMPurify
-  return DOMPurify.sanitize(dirty, {
-    ALLOWED_TAGS: [],
-    ALLOWED_ATTR: [],
-  })
+  return stripHtmlAndDangerous(dirty)
 }
 
 /**

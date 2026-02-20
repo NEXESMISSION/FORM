@@ -1,10 +1,21 @@
 'use client'
 
 import { useState, useRef, useEffect, useCallback } from 'react'
-import { MessageCircle, X, Send, Loader2, Sparkles, Trash2 } from 'lucide-react'
+import { MessageSquare, X, Send, Loader2, Sparkles, Trash2 } from 'lucide-react'
 import { useDebouncedValue, useLocalStorage } from '@/lib/hooks'
 
 type ChatMessage = { role: 'user' | 'assistant'; content: string; timestamp?: Date | string }
+
+const FAB_SIZE = 56 // 3.5rem
+const DEFAULT_POS = { left: 20, bottom: 120 }
+const STORAGE_KEY = 'chat-fab-position'
+
+function clampPos(left: number, bottom: number) {
+  return {
+    left: Math.max(0, Math.min(left, typeof window !== 'undefined' ? window.innerWidth - FAB_SIZE : 320)),
+    bottom: Math.max(0, Math.min(bottom, typeof window !== 'undefined' ? window.innerHeight - FAB_SIZE : 400)),
+  }
+}
 
 const QUICK_QUESTIONS = [
   'كيف أسجل في التطبيق؟',
@@ -17,7 +28,11 @@ const QUICK_QUESTIONS = [
 export default function ChatWidget() {
   const [open, setOpen] = useState(false)
   const [savedMessages, setSavedMessages, clearSavedMessages] = useLocalStorage<ChatMessage[]>('chat-history', [])
-  
+  const [fabPos, setFabPos] = useLocalStorage<{ left: number; bottom: number }>(STORAGE_KEY, DEFAULT_POS)
+  const [dragging, setDragging] = useState(false)
+  const dragStartRef = useRef<{ x: number; y: number; left: number; bottom: number } | null>(null)
+  const movedRef = useRef(false)
+
   // Initialize messages with normalized timestamps from localStorage
   const [messages, setMessages] = useState<ChatMessage[]>(() => {
     if (savedMessages && savedMessages.length > 0) {
@@ -92,6 +107,47 @@ export default function ChatWidget() {
     setIsTyping(debouncedInput.length > 0 && debouncedInput !== input)
   }, [debouncedInput, input])
 
+  // Drag handlers for FAB — move/up on button so they fire with setPointerCapture
+  const handlePointerDown = useCallback((e: React.PointerEvent) => {
+    e.preventDefault()
+    movedRef.current = false
+    dragStartRef.current = {
+      x: e.clientX,
+      y: e.clientY,
+      left: fabPos.left,
+      bottom: fabPos.bottom,
+    }
+    setDragging(true)
+    ;(e.currentTarget as HTMLElement).setPointerCapture(e.pointerId)
+  }, [fabPos.left, fabPos.bottom])
+
+  const handlePointerMove = useCallback((e: React.PointerEvent) => {
+    if (!dragStartRef.current) return
+    const dx = e.clientX - dragStartRef.current.x
+    const dy = e.clientY - dragStartRef.current.y
+    if (Math.abs(dx) > 4 || Math.abs(dy) > 4) movedRef.current = true
+    const next = clampPos(
+      dragStartRef.current.left + dx,
+      dragStartRef.current.bottom - dy
+    )
+    setFabPos(next)
+  }, [setFabPos])
+
+  const handlePointerUp = useCallback((e: React.PointerEvent) => {
+    ;(e.currentTarget as HTMLElement).releasePointerCapture(e.pointerId)
+    setDragging(false)
+    dragStartRef.current = null
+  }, [])
+
+  const handleFabClick = useCallback((e: React.MouseEvent) => {
+    if (movedRef.current) {
+      e.preventDefault()
+      e.stopPropagation()
+      return
+    }
+    setOpen((o) => !o)
+  }, [])
+
   const send = async (question?: string) => {
     const text = question || input.trim()
     if (!text || loading) return
@@ -156,27 +212,33 @@ export default function ChatWidget() {
     <>
       <button
         type="button"
-        onClick={() => setOpen((o) => !o)}
-        className={`fixed z-[9999] flex items-center justify-center rounded-full text-white shadow-2xl hover:shadow-3xl active:scale-95 touch-manipulation transition-all duration-300 group ${
-          open ? 'sm:bottom-[26rem]' : ''
+        onClick={handleFabClick}
+        onPointerDown={handlePointerDown}
+        onPointerMove={handlePointerMove}
+        onPointerUp={handlePointerUp}
+        onPointerCancel={handlePointerUp}
+        className={`fixed z-[9999] flex items-center justify-center rounded-full text-white shadow-2xl hover:shadow-3xl select-none ${
+          dragging ? 'cursor-grabbing' : 'cursor-grab active:scale-95 transition-transform duration-200'
         }`}
-        style={{ 
-          bottom: 'max(7.5rem, calc(env(safe-area-inset-bottom, 0px) + 7.5rem))',
-          right: 'max(1rem, calc(env(safe-area-inset-right, 0px) + 1rem))',
+        style={{
+          left: fabPos.left,
+          bottom: fabPos.bottom,
+          width: FAB_SIZE,
+          height: FAB_SIZE,
+          touchAction: 'none',
+          transition: dragging ? 'none' : 'box-shadow 0.2s, background 0.2s',
           WebkitTapHighlightColor: 'transparent',
-          background: open 
+          background: open
             ? 'linear-gradient(135deg, #1e40af 0%, #3b82f6 50%, #60a5fa 100%)'
             : 'linear-gradient(135deg, #1e40af 0%, #3b82f6 100%)',
-          width: '3.5rem',
-          height: '3.5rem',
-          boxShadow: open 
+          boxShadow: open
             ? '0 10px 30px -5px rgba(30, 64, 175, 0.4), 0 0 0 1px rgba(255, 255, 255, 0.1)'
-            : '0 8px 25px -5px rgba(30, 64, 175, 0.3), 0 0 0 1px rgba(255, 255, 255, 0.1)'
+            : '0 8px 25px -5px rgba(30, 64, 175, 0.3), 0 0 0 1px rgba(255, 255, 255, 0.1)',
         }}
-        aria-label="فتح الدردشة"
-        title="دردشة"
+        aria-label={open ? 'إغلاق الدردشة' : 'فتح الدردشة'}
+        title={open ? 'إغلاق' : 'دردشة'}
         onMouseEnter={(e) => {
-          if (!open) {
+          if (!open && !dragging) {
             e.currentTarget.style.background = 'linear-gradient(135deg, #1e3a8a 0%, #2563eb 100%)'
             e.currentTarget.style.transform = 'scale(1.05)'
           }
@@ -189,12 +251,12 @@ export default function ChatWidget() {
         }}
       >
         {open ? (
-          <X className="w-6 h-6 shrink-0 transition-transform duration-300 rotate-0" />
+          <X className="w-6 h-6 shrink-0 transition-transform duration-300 pointer-events-none" />
         ) : (
-          <MessageCircle className="w-6 h-6 shrink-0 transition-transform duration-300 group-hover:scale-110" />
+          <MessageSquare className="w-6 h-6 shrink-0 transition-transform duration-300 group-hover:scale-110 pointer-events-none" />
         )}
         {!open && (
-          <span className="absolute -top-1 -right-1 w-3 h-3 bg-red-500 rounded-full border-2 border-white animate-pulse" />
+          <span className="absolute -top-1 -right-1 w-3 h-3 bg-red-500 rounded-full border-2 border-white animate-pulse pointer-events-none" />
         )}
       </button>
 

@@ -18,7 +18,7 @@
 ### 2. **Input Sanitization & XSS Prevention** ✅
 - **File:** `lib/security/sanitization.ts`
 - **Features:**
-  - `sanitizeHtml()` - HTML sanitization with DOMPurify
+  - `sanitizeHtml()` - HTML sanitization (tag/dangerous-pattern stripping, no DOM dependency)
   - `sanitizeInput()` - Remove dangerous characters
   - `sanitizeObject()` - Recursive object sanitization
   - `sanitizePhone()` - Phone number validation
