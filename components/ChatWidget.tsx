@@ -34,7 +34,8 @@ export default function ChatWidget() {
 
   // Use default position until after mount to avoid server/client hydration mismatch (localStorage differs on client)
   useEffect(() => setMounted(true), [])
-  const fabPosition = mounted ? fabPos : DEFAULT_POS
+  // Always clamp so the FAB stays on-screen (saved position might be off-screen on smaller viewports)
+  const fabPosition = mounted ? clampPos(fabPos.left, fabPos.bottom) : DEFAULT_POS
   const dragStartRef = useRef<{ x: number; y: number; left: number; bottom: number } | null>(null)
   const movedRef = useRef(false)
 
@@ -257,9 +258,9 @@ export default function ChatWidget() {
         }}
       >
         {open ? (
-          <X className="w-6 h-6 shrink-0 transition-transform duration-300 pointer-events-none" />
+          <X className="w-5 h-5 shrink-0 transition-transform duration-300 pointer-events-none" />
         ) : (
-          <MessageSquare className="w-6 h-6 shrink-0 transition-transform duration-300 group-hover:scale-110 pointer-events-none" />
+          <MessageSquare className="w-5 h-5 shrink-0 transition-transform duration-300 group-hover:scale-110 pointer-events-none" />
         )}
         {!open && (
           <span className="absolute -top-1 -right-1 w-3 h-3 bg-red-500 rounded-full border-2 border-white animate-pulse pointer-events-none" />
