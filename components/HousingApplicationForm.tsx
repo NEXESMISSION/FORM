@@ -1447,6 +1447,10 @@ export default function HousingApplicationForm() {
                   ) : (
                     <div className="text-center space-y-4">
                       <p className="text-sm text-gray-600">اضغط على الزر لتسجيل صوتك وشرح وضعيتك</p>
+                      <div className="text-xs text-gray-500 space-y-1">
+                        <p>💡 تأكد من السماح للموقع بالوصول إلى الميكروفون</p>
+                        <p>إذا لم يعمل، انقر على أيقونة القفل 🔒 بجانب العنوان</p>
+                      </div>
                       <button
                         type="button"
                         onClick={async () => {
@@ -1463,13 +1467,19 @@ export default function HousingApplicationForm() {
                           } else {
                             // Start recording
                             try {
-                              // Check if mediaDevices is available
-                              if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
-                                toast.error('المتصفح لا يدعم التسجيل الصوتي')
+                              // Check if MediaRecorder is supported
+                              if (typeof MediaRecorder === 'undefined') {
+                                toast.error('المتصفح لا يدعم التسجيل الصوتي. يرجى استخدام متصفح حديث.')
                                 return
                               }
 
-                              // Check permission first
+                              // Check if mediaDevices is available
+                              if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+                                toast.error('المتصفح لا يدعم الوصول إلى الميكروفون. يرجى استخدام متصفح حديث.')
+                                return
+                              }
+
+                              // Check permission first (optional check, will be requested anyway)
                               let permissionStatus: PermissionStatus | null = null
                               try {
                                 permissionStatus = await navigator.permissions.query({ name: 'microphone' as PermissionName })
@@ -1477,9 +1487,10 @@ export default function HousingApplicationForm() {
                                 // Permission API not supported, continue anyway
                               }
 
+                              // If permission is denied, show helpful message but still try to request
                               if (permissionStatus?.state === 'denied') {
-                                toast.error('تم رفض الوصول إلى الميكروفون. يرجى تفعيله من إعدادات المتصفح.')
-                                return
+                                // Don't return early - still try to request in case user changed settings
+                                // The getUserMedia call will show its own error if still denied
                               }
 
                               // Request microphone access
@@ -1491,16 +1502,39 @@ export default function HousingApplicationForm() {
                                 } 
                               })
 
-                              // Check if MediaRecorder is supported
-                              if (!MediaRecorder.isTypeSupported('audio/webm')) {
-                                toast.error('نوع التسجيل غير مدعوم في هذا المتصفح')
-                                stream.getTracks().forEach(track => track.stop())
-                                return
+                              // Determine supported MIME type
+                              let mimeType = 'audio/webm'
+                              const supportedTypes = [
+                                'audio/webm',
+                                'audio/webm;codecs=opus',
+                                'audio/ogg;codecs=opus',
+                                'audio/mp4',
+                                'audio/mpeg',
+                                'audio/wav'
+                              ]
+                              
+                              for (const type of supportedTypes) {
+                                if (MediaRecorder.isTypeSupported(type)) {
+                                  mimeType = type
+                                  break
+                                }
                               }
 
-                              const recorder = new MediaRecorder(stream, {
-                                mimeType: MediaRecorder.isTypeSupported('audio/webm') ? 'audio/webm' : 'audio/mp4'
-                              })
+                              // Fallback: try without specifying mimeType
+                              let recorder: MediaRecorder
+                              try {
+                                recorder = new MediaRecorder(stream, { mimeType })
+                              } catch (e) {
+                                // If mimeType fails, try without it (browser will choose)
+                                try {
+                                  recorder = new MediaRecorder(stream)
+                                  mimeType = recorder.mimeType || 'audio/webm'
+                                } catch (e2) {
+                                  toast.error('المتصفح لا يدعم التسجيل الصوتي')
+                                  stream.getTracks().forEach(track => track.stop())
+                                  return
+                                }
+                              }
                               const chunks: Blob[] = []
                               
                               recorder.ondataavailable = (e) => {
@@ -1517,26 +1551,39 @@ export default function HousingApplicationForm() {
                                   clearInterval(recordingTimerRef.current)
                                   setRecordingTime(0)
                                 }
-                                stream.getTracks().forEach(track => track.stop())
+                                if (recordingStreamRef.current) {
+                                  recordingStreamRef.current.getTracks().forEach(track => track.stop())
+                                  recordingStreamRef.current = null
+                                }
                               }
                               
                               recorder.onstop = async () => {
                                 try {
-                                  const audioBlob = new Blob(chunks, { type: recorder.mimeType || 'audio/webm' })
+                                  const finalMimeType = recorder.mimeType || mimeType || 'audio/webm'
+                                  const audioBlob = new Blob(chunks, { type: finalMimeType })
                                   
                                   if (audioBlob.size === 0) {
                                     toast.error('التسجيل فارغ. حاول مرة أخرى.')
-                                    stream.getTracks().forEach(track => track.stop())
-                                    recordingStreamRef.current = null
+                                    if (recordingStreamRef.current) {
+                                      recordingStreamRef.current.getTracks().forEach(track => track.stop())
+                                      recordingStreamRef.current = null
+                                    }
                                     return
                                   }
                                   
                                   // Upload to Supabase
                                   if (userId) {
-                                    const fileName = `voice-notes/${userId}/${Date.now()}.webm`
+                                    // Determine file extension based on mimeType
+                                    let extension = 'webm'
+                                    if (finalMimeType.includes('mp4')) extension = 'mp4'
+                                    else if (finalMimeType.includes('ogg')) extension = 'ogg'
+                                    else if (finalMimeType.includes('wav')) extension = 'wav'
+                                    else if (finalMimeType.includes('mpeg') || finalMimeType.includes('mp3')) extension = 'mp3'
+                                    
+                                    const fileName = `voice-notes/${userId}/${Date.now()}.${extension}`
                                     const { error: uploadError, data } = await supabase.storage
                                       .from('documents')
-                                      .upload(fileName, audioBlob, { contentType: recorder.mimeType || 'audio/webm' })
+                                      .upload(fileName, audioBlob, { contentType: finalMimeType })
                                     
                                     if (!uploadError && data) {
                                       const { data: { publicUrl } } = supabase.storage.from('documents').getPublicUrl(fileName)
@@ -1551,17 +1598,27 @@ export default function HousingApplicationForm() {
                                   }
                                 } catch (uploadErr: any) {
                                   console.error('Upload error:', uploadErr)
-                                  toast.error('فشل حفظ التسجيل')
+                                  toast.error('فشل حفظ التسجيل: ' + (uploadErr?.message || 'خطأ غير معروف'))
                                 } finally {
-                                  stream.getTracks().forEach(track => track.stop())
-                                  recordingStreamRef.current = null
+                                  if (recordingStreamRef.current) {
+                                    recordingStreamRef.current.getTracks().forEach(track => track.stop())
+                                    recordingStreamRef.current = null
+                                  }
                                 }
                               }
                               
-                              recorder.start(1000) // Collect data every second
-                              setMediaRecorder(recorder)
-                              recordingStreamRef.current = stream
-                              setIsRecording(true)
+                              try {
+                                recorder.start(1000) // Collect data every second
+                                setMediaRecorder(recorder)
+                                recordingStreamRef.current = stream
+                                setIsRecording(true)
+                              } catch (startError: any) {
+                                console.error('Failed to start recorder:', startError)
+                                toast.error('فشل بدء التسجيل: ' + (startError?.message || 'خطأ غير معروف'))
+                                stream.getTracks().forEach(track => track.stop())
+                                setIsRecording(false)
+                                return
+                              }
                               
                               // Timer
                               let time = 0
@@ -1573,15 +1630,42 @@ export default function HousingApplicationForm() {
                               console.error('Microphone access error:', error)
                               setIsRecording(false)
                               
-                              // Better error messages
+                              // Better error messages with helpful instructions
+                              const errorMessage = error.message || ''
+                              const isSystemDenied = errorMessage.includes('by system') || errorMessage.includes('Permission denied by system')
+                              
                               if (error.name === 'NotAllowedError' || error.name === 'PermissionDeniedError') {
-                                toast.error('تم رفض الوصول إلى الميكروفون. يرجى السماح بالوصول من إعدادات المتصفح.')
+                                if (isSystemDenied) {
+                                  toast.error(
+                                    'تم رفض الوصول إلى الميكروفون من قبل النظام.\n\n' +
+                                    'لتفعيله:\n' +
+                                    '1. افتح إعدادات Windows → الخصوصية → الميكروفون\n' +
+                                    '2. فعّل "السماح للتطبيقات بالوصول إلى الميكروفون"\n' +
+                                    '3. فعّل "السماح للتطبيقات المكتبية بالوصول إلى الميكروفون"\n' +
+                                    '4. أعد تحميل الصفحة وحاول مرة أخرى',
+                                    { duration: 8000 }
+                                  )
+                                } else {
+                                  toast.error(
+                                    'تم رفض الوصول إلى الميكروفون.\n\n' +
+                                    'لتفعيله:\n' +
+                                    '1. انقر على أيقونة القفل 🔒 بجانب عنوان الموقع\n' +
+                                    '2. اختر "السماح" للميكروفون\n' +
+                                    '3. أعد المحاولة',
+                                    { duration: 6000 }
+                                  )
+                                }
                               } else if (error.name === 'NotFoundError' || error.name === 'DevicesNotFoundError') {
-                                toast.error('لم يتم العثور على ميكروفون. تأكد من توصيله.')
+                                toast.error('لم يتم العثور على ميكروفون. تأكد من توصيله وإعادة تحميل الصفحة.', { duration: 5000 })
                               } else if (error.name === 'NotReadableError' || error.name === 'TrackStartError') {
-                                toast.error('الميكروفون مستخدم من قبل تطبيق آخر. أغلق التطبيقات الأخرى وحاول مرة أخرى.')
+                                toast.error('الميكروفون مستخدم من قبل تطبيق آخر. أغلق التطبيقات الأخرى (Zoom، Teams، إلخ) وحاول مرة أخرى.', { duration: 5000 })
+                              } else if (error.name === 'OverconstrainedError' || error.name === 'ConstraintNotSatisfiedError') {
+                                toast.error('الميكروفون لا يدعم الإعدادات المطلوبة. جرّب متصفحاً آخر.', { duration: 5000 })
                               } else {
-                                toast.error('فشل الوصول إلى الميكروفون: ' + (error.message || 'خطأ غير معروف'))
+                                const baseMessage = isSystemDenied 
+                                  ? 'تم رفض الوصول من قبل النظام. تحقق من إعدادات Windows للميكروفون.'
+                                  : 'فشل الوصول إلى الميكروفون: ' + (error.message || 'خطأ غير معروف')
+                                toast.error(baseMessage + '\n\nتأكد من تفعيل الصلاحيات من إعدادات المتصفح والنظام.', { duration: 6000 })
                               }
                             }
                           }

@@ -342,9 +342,9 @@ export default function ChatWidget() {
               </div>
             ))}
             {loading && (
-              <div className="flex justify-end animate-in fade-in">
-                <div className="bg-gray-100 text-gray-600 px-4 py-3 rounded-2xl rounded-tr-md flex items-center gap-2 shadow-sm">
-                  <Loader2 className="w-4 h-4 animate-spin" />
+              <div className="flex justify-start animate-in fade-in">
+                <div className="bg-gray-100 text-gray-600 px-4 py-3 rounded-2xl rounded-tr-md flex items-center gap-2 shadow-sm text-right max-w-[85%] sm:max-w-[75%]">
+                  <Loader2 className="w-4 h-4 animate-spin shrink-0" />
                   <span className="text-sm">جاري التفكير...</span>
                 </div>
               </div>

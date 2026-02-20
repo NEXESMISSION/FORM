@@ -17,26 +17,26 @@ export const metadata: Metadata = {
   },
   icons: {
     icon: [
-      { url: '/logo.png', sizes: '512x512', type: 'image/png' },
-      { url: '/logo.png', sizes: '192x192', type: 'image/png' },
+      { url: '/icon.png', sizes: '512x512', type: 'image/png' },
+      { url: '/icon.png', sizes: '192x192', type: 'image/png' },
     ],
     apple: [
-      { url: '/logo.png', sizes: '180x180', type: 'image/png' },
+      { url: '/icon.png', sizes: '180x180', type: 'image/png' },
     ],
-    shortcut: '/logo.png',
+    shortcut: '/icon.png',
   },
   openGraph: {
     type: 'website',
     siteName: 'DOMOBAT',
     title: 'DOMOBAT — برنامج السكن الاقتصادي السريع',
     description: 'استمارة رقمية لدراسة الوضعية السكنية والمالية واقتراح الحل السكني الأنسب',
-    images: [{ url: '/logo.png', width: 512, height: 512, alt: 'DOMOBAT' }],
+    images: [{ url: '/icon.png', width: 512, height: 512, alt: 'DOMOBAT' }],
   },
   twitter: {
     card: 'summary',
     title: 'DOMOBAT — برنامج السكن الاقتصادي السريع',
     description: 'استمارة رقمية لدراسة الوضعية السكنية والمالية واقتراح الحل السكني الأنسب',
-    images: ['/logo.png'],
+    images: ['/icon.png'],
   },
   themeColor: '#1f2937',
   viewport: {
@@ -57,7 +57,7 @@ export default function RootLayout({
     <html lang="ar" dir="rtl">
       <head>
         <meta name="mobile-web-app-capable" content="yes" />
-        <link rel="icon" href="/logo.png" type="image/png" />
+        <link rel="icon" href="/icon.png" type="image/png" />
       </head>
       <body className="antialiased">
         <Suspense fallback={null}>

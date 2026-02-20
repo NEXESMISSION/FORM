@@ -39,3 +39,6 @@ next
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+
+# Note: Mobile app (domobat-mobile) is in a separate folder and Git repository
+# It won't be included when pushing updates to this project
