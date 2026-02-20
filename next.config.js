@@ -50,7 +50,7 @@ const nextConfig = {
               "style-src 'self' 'unsafe-inline'",
               "img-src 'self' data: https:",
               "font-src 'self' data:",
-              "connect-src 'self' https://*.supabase.co https://api.openai.com https://*.infobip.com",
+              "connect-src 'self' https://*.supabase.co https://api.openai.com https://*.infobip.com https://www.winsmspro.com",
               "frame-src 'self'",
               "object-src 'none'",
               "base-uri 'self'",

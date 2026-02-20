@@ -29,7 +29,12 @@ export default function ChatWidget() {
   const [open, setOpen] = useState(false)
   const [savedMessages, setSavedMessages, clearSavedMessages] = useLocalStorage<ChatMessage[]>('chat-history', [])
   const [fabPos, setFabPos] = useLocalStorage<{ left: number; bottom: number }>(STORAGE_KEY, DEFAULT_POS)
+  const [mounted, setMounted] = useState(false)
   const [dragging, setDragging] = useState(false)
+
+  // Use default position until after mount to avoid server/client hydration mismatch (localStorage differs on client)
+  useEffect(() => setMounted(true), [])
+  const fabPosition = mounted ? fabPos : DEFAULT_POS
   const dragStartRef = useRef<{ x: number; y: number; left: number; bottom: number } | null>(null)
   const movedRef = useRef(false)
 
@@ -114,12 +119,12 @@ export default function ChatWidget() {
     dragStartRef.current = {
       x: e.clientX,
       y: e.clientY,
-      left: fabPos.left,
-      bottom: fabPos.bottom,
+      left: fabPosition.left,
+      bottom: fabPosition.bottom,
     }
     setDragging(true)
     ;(e.currentTarget as HTMLElement).setPointerCapture(e.pointerId)
-  }, [fabPos.left, fabPos.bottom])
+  }, [fabPosition.left, fabPosition.bottom])
 
   const handlePointerMove = useCallback((e: React.PointerEvent) => {
     if (!dragStartRef.current) return
@@ -212,6 +217,7 @@ export default function ChatWidget() {
     <>
       <button
         type="button"
+        suppressHydrationWarning
         onClick={handleFabClick}
         onPointerDown={handlePointerDown}
         onPointerMove={handlePointerMove}
@@ -221,8 +227,8 @@ export default function ChatWidget() {
           dragging ? 'cursor-grabbing' : 'cursor-grab active:scale-95 transition-transform duration-200'
         }`}
         style={{
-          left: fabPos.left,
-          bottom: fabPos.bottom,
+          left: fabPosition.left,
+          bottom: fabPosition.bottom,
           width: FAB_SIZE,
           height: FAB_SIZE,
           touchAction: 'none',
