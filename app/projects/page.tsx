@@ -5,7 +5,7 @@ import { useRouter } from 'next/navigation'
 import { supabase } from '@/lib/supabase'
 import Link from 'next/link'
 import Image from 'next/image'
-import { ShoppingCart, Building2, X, Search, ChevronDown } from 'lucide-react'
+import { ShoppingCart, Building2, X, Search, ChevronDown, Settings } from 'lucide-react'
 import toast from 'react-hot-toast'
 import BottomNav from '@/components/BottomNav'
 import DirectPurchaseForm from '@/components/DirectPurchaseForm'
@@ -25,12 +25,23 @@ export default function ProjectsPage() {
   const [searchQuery, setSearchQuery] = useState('')
   const [loading, setLoading] = useState(true)
   const [user, setUser] = useState<any>(null)
+  const [profile, setProfile] = useState<{ role: string } | null>(null)
   const [purchaseModalProject, setPurchaseModalProject] = useState<any>(null)
 
   useEffect(() => {
     loadProjects()
-    supabase.auth.getUser().then(({ data: { user } }) => setUser(user))
   }, [statusFilter])
+
+  useEffect(() => {
+    supabase.auth.getUser().then(({ data: { user } }) => {
+      setUser(user)
+      if (user) {
+        supabase.from('profiles').select('role').eq('id', user.id).maybeSingle().then(({ data }) => setProfile(data || null))
+      } else {
+        setProfile(null)
+      }
+    })
+  }, [])
 
   const loadProjects = async () => {
     setLoading(true)
@@ -112,8 +123,18 @@ export default function ProjectsPage() {
   return (
     <div className="min-h-screen bg-surface">
       <header className="sticky top-0 z-10 bg-white/95 backdrop-blur border-b border-gray-100">
-        <div className="max-w-[28rem] mx-auto px-4 h-14 flex items-center justify-center">
-          <Image src="/logo.png" alt="DOMOBAT" width={112} height={112} className="rounded-2xl w-auto h-auto" priority />
+        <div className="max-w-[28rem] mx-auto px-4 h-14 flex items-center justify-center relative">
+          <Image src="/logo.png" alt="DOMOBAT" width={112} height={112} className="rounded-2xl w-auto h-auto" style={{ width: 'auto', height: 'auto' }} priority />
+          {profile?.role === 'admin' && (
+            <Link
+              href="/dashboard/admin"
+              className="absolute left-4 flex items-center gap-2 px-3 py-2 rounded-xl bg-primary-100 text-primary-700 text-sm font-medium hover:bg-primary-200"
+              aria-label="لوحة الإدارة"
+            >
+              <Settings className="w-4 h-4" />
+              الإدارة
+            </Link>
+          )}
         </div>
       </header>
 
@@ -160,7 +181,7 @@ export default function ProjectsPage() {
           </div>
         ) : (
           <div className="space-y-3">
-            {filteredProjects.map((project) => (
+            {filteredProjects.map((project, index) => (
               <Link
                 key={project.id}
                 href={`/projects/${project.id}`}
@@ -174,6 +195,7 @@ export default function ProjectsPage() {
                       fill
                       className="object-cover"
                       sizes="112px"
+                      priority={index === 0}
                     />
                   ) : (
                     <div className="w-full h-full flex items-center justify-center">

@@ -22,7 +22,7 @@ const PURCHASE_STATUS_COLORS: Record<string, string> = {
   rejected: 'bg-red-100 text-red-800 border-red-200',
 }
 
-const PROGRESS_STAGE_LABELS: Record<string, string> = {
+const DEFAULT_PROGRESS_STAGE_LABELS: Record<string, string> = {
   study: 'دراسة المشروع',
   design: 'التصميم',
   construction: 'البناء',
@@ -37,7 +37,9 @@ export default function DirectPurchaseDetailPage() {
   const id = params?.id as string
   const [purchase, setPurchase] = useState<any>(null)
   const [projectName, setProjectName] = useState<string>('')
+  const [projectCustomStages, setProjectCustomStages] = useState<string[] | null>(null)
   const [loading, setLoading] = useState(true)
+  const [progressStageLabels, setProgressStageLabels] = useState<Record<string, string>>(() => ({ ...DEFAULT_PROGRESS_STAGE_LABELS }))
 
   useEffect(() => {
     if (!id) return
@@ -55,13 +57,19 @@ export default function DirectPurchaseDetailPage() {
         .maybeSingle()
       if (error || !row) {
         toast.error('الطلب غير موجود')
-        router.replace('/dashboard/applicant')
+        router.replace('/dashboard')
         return
       }
       setPurchase(row)
       if (row.project_id) {
-        const { data: proj } = await supabase.from('projects').select('name').eq('id', row.project_id).single()
+        const { data: proj } = await supabase.from('projects').select('name, custom_progress_stages').eq('id', row.project_id).single()
         setProjectName(proj?.name || '—')
+        setProjectCustomStages(Array.isArray(proj?.custom_progress_stages) ? proj.custom_progress_stages : null)
+      }
+      const { data: stages } = await supabase.from('progress_stages').select('value, label_ar').not('value', 'is', null).order('sort_order', { ascending: true })
+      if (stages?.length) {
+        const fromDb = Object.fromEntries(stages.map((s: { value: string; label_ar: string }) => [s.value, s.label_ar]))
+        setProgressStageLabels(prev => ({ ...DEFAULT_PROGRESS_STAGE_LABELS, ...fromDb }))
       }
       setLoading(false)
     }
@@ -84,7 +92,7 @@ export default function DirectPurchaseDetailPage() {
     <div className="min-h-screen bg-surface flex flex-col pb-28">
       <header className="sticky top-0 z-10 bg-white/95 backdrop-blur border-b border-gray-100">
         <div className="max-w-[28rem] mx-auto px-4 h-14 flex items-center gap-3">
-          <Link href="/dashboard/applicant" className="p-2 -m-2 rounded-xl hover:bg-gray-100 flex items-center text-gray-600">
+          <Link href="/dashboard" className="p-2 -m-2 rounded-xl hover:bg-gray-100 flex items-center text-gray-600">
             <ChevronRight className="w-5 h-5" />
           </Link>
           <span className="text-base font-semibold text-gray-900">تفاصيل طلب الشراء</span>
@@ -115,14 +123,19 @@ export default function DirectPurchaseDetailPage() {
             <p className="text-xs text-gray-500 mb-4">تحديثات من الإدارة تظهر هنا فور رفعها.</p>
 
             <div className="space-y-2 mb-4">
-              {PROGRESS_STAGES_ORDER.map((stageKey, idx) => {
-                const currentStageIndex = purchase.progress_stage ? PROGRESS_STAGES_ORDER.indexOf(purchase.progress_stage as typeof PROGRESS_STAGES_ORDER[number]) : -1
-                const stepIndex = PROGRESS_STAGES_ORDER.indexOf(stageKey)
-                const isCompleted = currentStageIndex >= 0 && stepIndex < currentStageIndex
-                const isCurrent = purchase.progress_stage === stageKey
+              {(projectCustomStages && projectCustomStages.length > 0
+                ? projectCustomStages.map((l: string) => ({ key: l, label: l }))
+                : PROGRESS_STAGES_ORDER.map(k => ({ key: k, label: progressStageLabels[k] || k }))
+              ).map(({ key, label }, idx) => {
+                const isCustom = projectCustomStages && projectCustomStages.length > 0
+                const currentIndex = isCustom && purchase.progress_stage
+                  ? projectCustomStages.indexOf(purchase.progress_stage)
+                  : purchase.progress_stage ? PROGRESS_STAGES_ORDER.indexOf(purchase.progress_stage as typeof PROGRESS_STAGES_ORDER[number]) : -1
+                const isCompleted = currentIndex >= 0 && idx < currentIndex
+                const isCurrent = purchase.progress_stage === key
                 return (
                   <div
-                    key={stageKey}
+                    key={idx}
                     className={`flex items-center gap-3 py-2.5 px-3 rounded-xl border-2 transition-colors ${
                       isCurrent ? 'border-primary-400 bg-primary-50' : isCompleted ? 'border-green-200 bg-green-50/80' : 'border-gray-100 bg-gray-50/50'
                     }`}
@@ -133,7 +146,7 @@ export default function DirectPurchaseDetailPage() {
                       {isCompleted ? '✓' : idx + 1}
                     </span>
                     <span className={`text-sm font-medium ${isCurrent ? 'text-primary-900' : isCompleted ? 'text-green-800' : 'text-gray-600'}`}>
-                      {PROGRESS_STAGE_LABELS[stageKey] || stageKey}
+                      {label}
                     </span>
                     {isCurrent && <span className="text-xs text-primary-600 font-medium mr-auto">المرحلة الحالية</span>}
                   </div>
@@ -147,7 +160,7 @@ export default function DirectPurchaseDetailPage() {
                   <p className="text-xs text-gray-500">نسبة الإنجاز</p>
                   {purchase.progress_stage && (
                     <p className="text-xs font-medium text-primary-700 mt-0.5">
-                      {PROGRESS_STAGE_LABELS[purchase.progress_stage] || purchase.progress_stage}
+                      {progressStageLabels[purchase.progress_stage] || purchase.progress_stage}
                     </p>
                   )}
                 </div>

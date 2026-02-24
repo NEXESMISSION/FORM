@@ -45,7 +45,7 @@ const MARITAL_LABELS: Record<string, string> = {
   widowed: 'أرمل',
 }
 
-const PROGRESS_STAGE_LABELS: Record<string, string> = {
+const DEFAULT_PROGRESS_STAGE_LABELS: Record<string, string> = {
   study: 'دراسة المشروع',
   design: 'التصميم',
   construction: 'البناء',
@@ -62,6 +62,7 @@ export default function HousingApplicationDetailPage() {
   const [app, setApp] = useState<any>(null)
   const [user, setUser] = useState<any>(null)
   const [loading, setLoading] = useState(true)
+  const [progressStageLabels, setProgressStageLabels] = useState<Record<string, string>>(() => ({ ...DEFAULT_PROGRESS_STAGE_LABELS }))
   const [uploadingForDocType, setUploadingForDocType] = useState<string | null>(null)
   const [confirmUploadFor, setConfirmUploadFor] = useState<string | null>(null)
   const [previewDoc, setPreviewDoc] = useState<{ url: string; fileName: string } | null>(null)
@@ -79,17 +80,22 @@ export default function HousingApplicationDetailPage() {
         return
       }
       setUser(user)
-      const [{ data: appData, error }, { data: docTypes }] = await Promise.all([
+      const [{ data: appData, error }, { data: docTypes }, { data: stages }] = await Promise.all([
         supabase.from('housing_applications').select('*').eq('id', id).eq('user_id', user.id).maybeSingle(),
         supabase.from('required_document_types').select('id, label_ar').eq('active', true).order('sort_order', { ascending: true }),
+        supabase.from('progress_stages').select('value, label_ar').not('value', 'is', null).order('sort_order', { ascending: true }),
       ])
       if (error || !appData) {
         toast.error('الطلب غير موجود')
-        router.replace('/dashboard/applicant')
+        router.replace('/dashboard')
         return
       }
       setApp(appData)
       setRequiredDocTypes(docTypes || [])
+      if (stages?.length) {
+        const fromDb = Object.fromEntries(stages.map((s: { value: string; label_ar: string }) => [s.value, s.label_ar]))
+        setProgressStageLabels(prev => ({ ...DEFAULT_PROGRESS_STAGE_LABELS, ...fromDb }))
+      }
       setLoading(false)
     }
     load()
@@ -216,8 +222,8 @@ export default function HousingApplicationDetailPage() {
 
   if (loading || !app) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-surface">
-        <div className="spinner w-8 h-8 text-primary-600" />
+      <div className="min-h-screen flex items-center justify-center bg-gold-50">
+        <div className="spinner w-8 h-8 text-gold-600" />
       </div>
     )
   }
@@ -266,66 +272,69 @@ export default function HousingApplicationDetailPage() {
   const hasMissing = missingAlert !== undefined
 
   return (
-    <div className="min-h-screen bg-surface flex flex-col pb-28">
-      <header className="sticky top-0 z-10 bg-white/95 backdrop-blur border-b border-gray-100">
+    <div className="min-h-screen bg-gray-50 flex flex-col pb-28">
+      <header className="sticky top-0 z-10 bg-white shadow-sm">
         <div className="max-w-[28rem] mx-auto px-4 h-14 flex items-center gap-3">
-          <Link href="/dashboard/applicant" className="p-2 -m-2 rounded-xl hover:bg-gray-100 flex items-center text-gray-600">
+          <Link href="/dashboard" className="p-2 -m-2 rounded-xl hover:bg-gray-100 flex items-center text-gray-600" aria-label="العودة">
             <ChevronRight className="w-5 h-5" />
           </Link>
-          <span className="text-base font-semibold text-gray-900 flex-1">تفاصيل طلب السكن</span>
+          <span className="text-lg font-bold text-gray-900 flex-1">تفاصيل طلب السكن</span>
           {hasAlert && (
-            <span className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl text-xs font-medium ${
-              rejectedSlots.length > 0 
-                ? 'bg-red-100 text-red-700' 
-                : slotsWithRejectedDocs.length > 0 && slotsWithRejectedDocs.some(s => {
-                    const docs = getDocsForSlotHelper(s.label)
-                    return docs.some((d: any) => d.status === 'accepted')
-                  })
-                ? 'bg-amber-100 text-amber-700'
-                : hasMissing 
-                  ? 'bg-amber-100 text-amber-700' 
-                  : 'bg-blue-100 text-blue-700'
-            }`} title="لديك طلبات أو ملاحظات من الإدارة">
+            <span className="flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-semibold bg-amber-100 text-amber-800">
               <AlertCircle className="w-4 h-4 shrink-0" />
-              تنبيه
+              إجراء مطلوب
             </span>
           )}
         </div>
       </header>
 
-      {hasAlert && (
-        <div className="bg-red-50 border-b border-red-200 px-4 py-3">
-          <p className="text-sm text-red-800 text-center font-medium">
-            لديك طلبات أو ملاحظات من الإدارة. راجع قسم المستندات أدناه.
-          </p>
+      <main className="max-w-[28rem] mx-auto w-full px-4 py-5 flex-1 space-y-5">
+        {/* بطاقة العنوان والحالة */}
+        <div className="rounded-2xl bg-white border border-gray-200 shadow-sm p-5">
+          <p className="text-xs font-medium text-gray-500 uppercase tracking-wide mb-2">طلب السكن</p>
+          <div className="flex flex-wrap items-center gap-3 mb-2">
+            <span className={`inline-flex px-4 py-2 rounded-xl text-base font-bold border-2 ${statusClass}`}>
+              {STATUS_LABELS[app.status] || app.status}
+            </span>
+            <span className="text-sm text-gray-500">
+              {new Date(app.created_at).toLocaleDateString('ar-TN', { dateStyle: 'long' })}
+            </span>
+          </div>
+          {showDocsAlert && (
+            <div className="mt-4 pt-4 border-t border-gray-100">
+              <p className="text-sm font-semibold text-amber-900 mb-1">خطوتك التالية</p>
+              <p className="text-sm text-amber-800">
+                {rejectedSlots.length > 0
+                  ? 'استبدال المستندات المرفوضة في قسم المستندات أدناه.'
+                  : hasMissing
+                    ? 'ارفع المستندات الناقصة في قسم المستندات أدناه.'
+                    : 'راجع قسم المستندات أدناه حسب طلب الإدارة.'}
+              </p>
+            </div>
+          )}
         </div>
-      )}
 
-      <main className="max-w-[28rem] mx-auto w-full px-4 py-6 flex-1">
-        {/* الحالة */}
-        <div className={`mb-6 rounded-2xl border-2 p-4 ${statusClass}`}>
-          <p className="text-xs font-medium opacity-90 mb-1">الحالة</p>
-          <p className="text-xl font-bold">{STATUS_LABELS[app.status] || app.status}</p>
-          <p className="text-sm opacity-80 mt-1">{new Date(app.created_at).toLocaleDateString('ar-TN', { dateStyle: 'long' })}</p>
-        </div>
-
-        {/* تتبع التقدم — للموافَق عليهم فقط، خطوات واضحة وتحديثات من الإدارة */}
+        {/* تتبع التقدم — للموافَق عليهم فقط */}
         {app.status === 'approved' && (
-          <div className="card mb-6">
-            <h3 className="text-sm font-semibold text-gray-900 mb-1">تتبع تقدم طلبك</h3>
-            <p className="text-xs text-gray-500 mb-4">تحديثات من الإدارة تظهر هنا فور رفعها.</p>
+          <div className="rounded-2xl bg-white border border-gray-200 shadow-sm p-5">
+            <h3 className="text-base font-bold text-gray-900 mb-1">تتبع تقدم طلبك</h3>
+            <p className="text-sm text-gray-600 mb-4">تحديثات من الإدارة تظهر هنا.</p>
 
-            {/* خطوات التقدم */}
+            {/* خطوات التقدم — مراحل مخصصة للطلب أو المراحل العامة */}
             <div className="space-y-2 mb-4">
-              {PROGRESS_STAGES_ORDER.map((stageKey, idx) => {
-                const currentStageIndex = app.progress_stage ? PROGRESS_STAGES_ORDER.indexOf(app.progress_stage as typeof PROGRESS_STAGES_ORDER[number]) : -1
-                const stepIndex = PROGRESS_STAGES_ORDER.indexOf(stageKey)
-                const isCompleted = currentStageIndex >= 0 && stepIndex < currentStageIndex
-                const isCurrent = app.progress_stage === stageKey
-                const isUpcoming = currentStageIndex >= 0 && stepIndex > currentStageIndex
+              {(Array.isArray(app.custom_progress_stages) && app.custom_progress_stages.length > 0
+                ? app.custom_progress_stages.map((l: string) => ({ key: l, label: l }))
+                : PROGRESS_STAGES_ORDER.map(k => ({ key: k, label: progressStageLabels[k] || k }))
+              ).map(({ key, label }: { key: string; label: string }, idx: number) => {
+                const isCustom = Array.isArray(app.custom_progress_stages) && app.custom_progress_stages.length > 0
+                const currentIndex = isCustom && app.progress_stage
+                  ? app.custom_progress_stages.indexOf(app.progress_stage)
+                  : app.progress_stage ? PROGRESS_STAGES_ORDER.indexOf(app.progress_stage as typeof PROGRESS_STAGES_ORDER[number]) : -1
+                const isCompleted = currentIndex >= 0 && idx < currentIndex
+                const isCurrent = app.progress_stage === key
                 return (
                   <div
-                    key={stageKey}
+                    key={idx}
                     className={`flex items-center gap-3 py-2.5 px-3 rounded-xl border-2 transition-colors ${
                       isCurrent ? 'border-primary-400 bg-primary-50' : isCompleted ? 'border-green-200 bg-green-50/80' : 'border-gray-100 bg-gray-50/50'
                     }`}
@@ -336,7 +345,7 @@ export default function HousingApplicationDetailPage() {
                       {isCompleted ? '✓' : idx + 1}
                     </span>
                     <span className={`text-sm font-medium ${isCurrent ? 'text-primary-900' : isCompleted ? 'text-green-800' : 'text-gray-600'}`}>
-                      {PROGRESS_STAGE_LABELS[stageKey] || stageKey}
+                      {label}
                     </span>
                     {isCurrent && <span className="text-xs text-primary-600 font-medium mr-auto">المرحلة الحالية</span>}
                   </div>
@@ -351,7 +360,7 @@ export default function HousingApplicationDetailPage() {
                   <p className="text-xs text-gray-500">نسبة الإنجاز</p>
                   {app.progress_stage && (
                     <p className="text-xs font-medium text-primary-700 mt-0.5">
-                      {PROGRESS_STAGE_LABELS[app.progress_stage] || app.progress_stage}
+                      {progressStageLabels[app.progress_stage] || app.progress_stage}
                     </p>
                   )}
                 </div>
@@ -382,170 +391,20 @@ export default function HousingApplicationDetailPage() {
           </div>
         )}
 
-        {/* تنبيه: مستندات ناقصة / طلب إدارة / مرفوض — لمساعدة المستخدم على تحديد المطلوب */}
-        {showDocsAlert && (
-          <div className={`mb-4 rounded-2xl border-2 p-4 ${
-            rejectedSlots.length > 0 
-              ? 'border-red-300 bg-red-50' 
-              : slotsWithRejectedDocs.length > 0 && slotsWithRejectedDocs.some(s => {
-                  const docs = getDocsForSlotHelper(s.label)
-                  return docs.some((d: any) => d.status === 'accepted')
-                })
-                ? 'border-amber-300 bg-amber-50'
-                : hasMissing 
-                  ? 'border-amber-300 bg-amber-50' 
-                  : 'border-blue-300 bg-blue-50'
-          }`}>
-            <div className="flex gap-3">
-              <div className={`shrink-0 flex h-10 w-10 items-center justify-center rounded-xl text-white ${
-                rejectedSlots.length > 0 
-                  ? 'bg-red-500' 
-                  : slotsWithRejectedDocs.length > 0 && slotsWithRejectedDocs.some(s => {
-                      const docs = getDocsForSlotHelper(s.label)
-                      return docs.some((d: any) => d.status === 'accepted')
-                    })
-                  ? 'bg-amber-500'
-                  : hasMissing 
-                    ? 'bg-amber-500' 
-                    : 'bg-blue-500'
-              }`}>
-                <AlertCircle className="w-5 h-5" />
-              </div>
-              <div className="min-w-0 flex-1">
-                <p className={`text-sm font-semibold mb-2 ${
-                  rejectedSlots.length > 0 
-                    ? 'text-red-900' 
-                    : slotsWithRejectedDocs.length > 0 && slotsWithRejectedDocs.some(s => {
-                        const docs = getDocsForSlotHelper(s.label)
-                        return docs.some((d: any) => d.status === 'accepted')
-                      })
-                    ? 'text-amber-900'
-                    : hasMissing 
-                      ? 'text-amber-900' 
-                      : 'text-blue-900'
-                }`}>
-                  {rejectedSlots.length > 0 
-                    ? 'مستندات مرفوضة — يرجى استبدالها' 
-                    : slotsWithRejectedDocs.length > 0 && slotsWithRejectedDocs.some(s => {
-                        const docs = getDocsForSlotHelper(s.label)
-                        return docs.some((d: any) => d.status === 'accepted')
-                      })
-                    ? 'تنبيه: مستندات مرفوضة'
-                    : hasMissing 
-                      ? 'مستندات ناقصة — يجب رفعها' 
-                      : 'تنبيه من الإدارة'}
-                </p>
-                <ul className="space-y-2 text-sm">
-                  {rejectedSlots.length > 0 && (
-                    <li className="flex items-start gap-2">
-                      <span className="shrink-0 mt-0.5 w-1.5 h-1.5 rounded-full bg-red-500" />
-                      <div className="flex-1">
-                        <ul className="space-y-1.5 text-red-800">
-                          {rejectedSlots.map((s) => {
-                            const docs = getDocsForSlotHelper(s.label)
-                            const rejectedDoc = docs.find((d: any) => d.status === 'rejected')
-                            return (
-                              <li key={s.label} className="flex items-start gap-2">
-                                <span className="shrink-0 mt-0.5">•</span>
-                                <div>
-                                  <span className="font-medium">{s.label}</span>
-                                  {rejectedDoc?.rejectionReason && (
-                                    <span className="block text-xs mt-0.5 text-red-700">سبب الرفض: {rejectedDoc.rejectionReason}</span>
-                                  )}
-                                </div>
-                              </li>
-                            )
-                          })}
-                        </ul>
-                      </div>
-                    </li>
-                  )}
-                  {slotsWithRejectedDocs.length > 0 && slotsWithRejectedDocs.some(s => {
-                    const docs = getDocsForSlotHelper(s.label)
-                    const hasAccepted = docs.some((d: any) => d.status === 'accepted')
-                    return hasAccepted // Only show if there's an accepted doc alongside rejected
-                  }) && (
-                    <li className="flex items-start gap-2">
-                      <span className="shrink-0 mt-0.5 w-1.5 h-1.5 rounded-full bg-amber-500" />
-                      <div className="flex-1">
-                        <p className="font-semibold text-amber-900 mb-1">تنبيه: مستندات مرفوضة (لديك مستندات مقبولة أخرى):</p>
-                        <ul className="space-y-1.5 text-amber-800">
-                          {slotsWithRejectedDocs
-                            .filter(s => {
-                              const docs = getDocsForSlotHelper(s.label)
-                              return docs.some((d: any) => d.status === 'accepted') && docs.some((d: any) => d.status === 'rejected')
-                            })
-                            .map((s) => {
-                              const docs = getDocsForSlotHelper(s.label)
-                              const rejectedDocs = docs.filter((d: any) => d.status === 'rejected')
-                              return (
-                                <li key={s.label} className="flex items-start gap-2">
-                                  <span className="shrink-0 mt-0.5">•</span>
-                                  <div>
-                                    <span className="font-medium">{s.label}</span>
-                                    {rejectedDocs.map((d: any, idx: number) => (
-                                      <span key={idx} className="block text-xs mt-0.5 text-amber-700">
-                                        مرفوض: {d.rejectionReason || 'بدون سبب'}
-                                      </span>
-                                    ))}
-                                  </div>
-                                </li>
-                              )
-                            })}
-                        </ul>
-                      </div>
-                    </li>
-                  )}
-                  {hasMissing && (
-                    <li className="flex items-start gap-2">
-                      <span className="shrink-0 mt-0.5 w-1.5 h-1.5 rounded-full bg-amber-500" />
-                      <div>
-                        <p className="text-amber-800">{missingSlots.map((s) => s.label).join('، ')}</p>
-                      </div>
-                    </li>
-                  )}
-                  {hasAdminRequest && adminMessage && (
-                    <li className="flex items-start gap-2">
-                      <span className="shrink-0 mt-0.5 w-1.5 h-1.5 rounded-full bg-blue-500" />
-                      <div className="flex-1">
-                        <p className="font-semibold text-blue-900 mb-1.5">طلب من الإدارة:</p>
-                        <div className="text-blue-800 whitespace-pre-wrap text-sm leading-relaxed">
-                          {adminMessage.split('\n').map((line, idx) => {
-                            const trimmed = line.trim()
-                            if (trimmed.startsWith('•') || trimmed.startsWith('-')) {
-                              return (
-                                <div key={idx} className="flex items-start gap-2 my-1">
-                                  <span className="shrink-0 mt-0.5">•</span>
-                                  <span>{trimmed.replace(/^[•\-]\s*/, '')}</span>
-                                </div>
-                              )
-                            }
-                            if (trimmed.startsWith('المطلوب') || trimmed === 'المطلوب:') {
-                              return null // Skip header, we'll show it differently
-                            }
-                            return <p key={idx} className={idx > 0 ? 'mt-2' : ''}>{line}</p>
-                          })}
-                        </div>
-                      </div>
-                    </li>
-                  )}
-                </ul>
-              </div>
+        {/* المستندات */}
+        <div className="rounded-2xl bg-white border border-gray-200 shadow-sm p-5">
+          <div className="flex items-center gap-2 mb-1">
+            <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-primary-100 text-primary-600">
+              <FileText className="w-5 h-5" />
+            </div>
+            <div>
+              <h3 className="text-base font-bold text-gray-900">المستندات</h3>
+              <p className="text-xs text-gray-500 mt-0.5">PDF أو صور · يمكنك رفع أكثر من ملف</p>
             </div>
           </div>
-        )}
-
-        {/* المستندات — صف لكل نوع: اسم المستند + رفع أو حالة (مقبول / مرفوض مع السبب) */}
-        <div className="card mb-6">
-          <h3 className="text-sm font-semibold text-gray-900 mb-3 flex items-center gap-2">
-            المستندات
-            {showDocsAlert && (
-              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-lg bg-amber-100 text-amber-800 text-xs font-medium">
-                <AlertCircle className="w-3.5 h-3.5" />
-                مطلوب إكمال
-              </span>
-            )}
-          </h3>
+          <p className="text-sm text-gray-600 mt-3 mb-4">
+            ارفع كل مستند مطلوب أدناه. بعد الرفع تنتظر المراجعة من الإدارة.
+          </p>
           {docSlots.length === 0 ? (
             <p className="text-sm text-gray-500">لا توجد مستندات مطلوبة حالياً.</p>
           ) : (
@@ -581,122 +440,85 @@ export default function HousingApplicationDetailPage() {
                         : 'border-gray-100 bg-gray-50/50' // Default - gray
 
 
+                const statusLabel = hasAccepted
+                  ? 'مقبول'
+                  : hasPendingReview && !hasAccepted
+                    ? 'قيد المراجعة'
+                    : allRejected
+                      ? 'مرفوض'
+                      : 'مطلوب'
+                const statusPillClass = hasAccepted
+                  ? 'bg-green-100 text-green-800'
+                  : hasPendingReview && !hasAccepted
+                    ? 'bg-blue-100 text-blue-800'
+                    : allRejected
+                      ? 'bg-red-100 text-red-800'
+                      : 'bg-amber-100 text-amber-800'
+
                 return (
                   <li
                     key={slot.label}
-                    className={`rounded-xl border-2 p-3 ${slotColor}`}
+                    className={`rounded-xl border-2 p-4 ${slotColor}`}
                   >
-                    <div className="flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-3">
-                      <div className="flex-1 min-w-0">
-                        <p className="text-sm font-medium text-gray-900">{slot.label}</p>
-                        {slot.isExtra && (
-                          <p className={`text-xs font-medium mt-0.5 flex items-center gap-1 ${
-                            hasAccepted 
-                              ? 'text-green-700' 
-                              : hasPendingReview 
-                                ? 'text-indigo-700' 
-                                : 'text-purple-700'
-                          }`}>
-                            <FileText className="w-3.5 h-3.5 shrink-0" />
-                            {hasAccepted ? 'مطلوب من الإدارة — مقبول' : hasPendingReview ? 'مطلوب من الإدارة — قيد المراجعة' : 'مطلوب من الإدارة'}
-                          </p>
-                        )}
-                        {hasPendingReview && !hasAccepted && (
-                          <p className="text-xs text-blue-700 font-medium mt-0.5 flex items-center gap-1">
-                            <FileText className="w-3.5 h-3.5 shrink-0" />
-                            قيد المراجعة
-                          </p>
-                        )}
-                        {hasRejected && hasAccepted && (
-                          <p className="text-xs text-amber-700 font-medium mt-0.5 flex items-center gap-1">
-                            <AlertCircle className="w-3.5 h-3.5 shrink-0" />
-                            تنبيه: مستند مرفوض (لديك مستند مقبول)
-                          </p>
-                        )}
-                        {hasRejected && !hasAccepted && !hasPendingReview && docs.find((d: any) => d.status === 'rejected')?.rejectionReason && (
+                    <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+                      <div className="min-w-0 flex-1">
+                        <div className="flex flex-wrap items-center gap-2 mb-1">
+                          <p className="text-sm font-bold text-gray-900">{slot.label}</p>
+                          <span className={`inline-flex px-2.5 py-1 rounded-lg text-xs font-semibold ${statusPillClass}`}>
+                            {statusLabel}
+                          </span>
+                        </div>
+                        {allRejected && docs.find((d: any) => d.status === 'rejected')?.rejectionReason && (
                           <p className="text-xs text-red-600 mt-1">سبب الرفض: {docs.find((d: any) => d.status === 'rejected')?.rejectionReason}</p>
                         )}
-                        {hasRejected && hasPendingReview && !hasAccepted && docs.find((d: any) => d.status === 'rejected')?.rejectionReason && (
-                          <p className="text-xs text-gray-500 mt-1">سبب الرفض السابق: {docs.find((d: any) => d.status === 'rejected')?.rejectionReason}</p>
-                        )}
                         {getDocsForSlotHelper(slot.label).length > 0 && (
-                          <ul className="mt-2 space-y-1.5">
+                          <div className="mt-2 flex flex-wrap gap-x-3 gap-y-1">
                             {getDocsForSlotHelper(slot.label).map((d: any) => (
-                              <li key={d.id} className="flex flex-col gap-0.5">
-                                <button type="button" onClick={() => setPreviewDoc({ url: d.url, fileName: d.fileName })} className="text-xs text-left hover:underline flex items-center gap-1 text-primary-600">
-                                  <ExternalLink className="w-3 h-3 shrink-0" />
-                                  {d.fileName} — فتح
-                                </button>
-                                <span className="text-xs text-gray-500">نوع المستند: {slot.label}</span>
-                                {d.status === 'rejected' && d.rejectionReason && (
-                                  <span className="text-xs text-gray-500 italic">مرفوض سابقاً — سبب: {d.rejectionReason}</span>
-                                )}
-                                {d.status === 'pending_review' && (
-                                  <span className="text-xs text-blue-600 font-medium">✓ قيد المراجعة</span>
-                                )}
-                                {d.status === 'accepted' && (
-                                  <span className="text-xs text-green-600 font-medium">✓ مقبول</span>
-                                )}
-                              </li>
+                              <button
+                                key={d.id}
+                                type="button"
+                                onClick={() => setPreviewDoc({ url: d.url, fileName: d.fileName })}
+                                className="text-xs text-primary-600 hover:underline flex items-center gap-1"
+                              >
+                                <ExternalLink className="w-3 h-3 shrink-0" />
+                                {d.fileName}
+                              </button>
                             ))}
-                          </ul>
+                          </div>
                         )}
                       </div>
                       <div className="shrink-0 flex flex-col gap-2">
                         {pending?.length ? (
-                          <div className="rounded-xl border-2 border-primary-200 bg-primary-50/50 p-3 flex flex-col gap-3 min-w-[200px]">
-                            <p className="text-xs font-semibold text-gray-800">نوع المستند: {slot.label}</p>
-                            <ul className="text-xs text-gray-700 space-y-1 max-h-28 overflow-y-auto">
-                              {pending.map((f, i) => (
-                                <li key={i} className="flex items-center gap-1.5">
-                                  <FileText className="w-3.5 h-3.5 shrink-0 text-primary-600" />
-                                  <span className="truncate">{f.name}</span>
-                                </li>
-                              ))}
-                            </ul>
+                          <div className="rounded-xl border border-primary-200 bg-primary-50/50 p-3 flex flex-col gap-2">
+                            <p className="text-xs text-gray-700">{pending.length} ملف جاهز للرفع</p>
                             <div className="flex flex-wrap gap-2">
                               <input
-                                ref={(el) => {
-                                  fileInputRefs.current[slot.label] = el
-                                }}
+                                ref={(el) => { fileInputRefs.current[slot.label] = el }}
                                 type="file"
                                 multiple
                                 accept=".pdf,.jpg,.jpeg,.png,.webp"
                                 className="hidden"
-                                onChange={(e) => {
-                                  handleFileSelectFor(slot.label, e)
-                                }}
+                                onChange={(e) => handleFileSelectFor(slot.label, e)}
                                 disabled={uploading}
                               />
                               <button
                                 type="button"
-                                onClick={() => {
-                                  triggerFileInput(slot.label)
-                                }}
+                                onClick={() => triggerFileInput(slot.label)}
                                 disabled={uploading}
-                                className="inline-flex items-center gap-1.5 py-2 px-3 rounded-lg bg-white border border-gray-300 text-gray-700 text-xs font-medium hover:bg-gray-50 disabled:opacity-50"
+                                className="inline-flex items-center gap-1.5 py-2 px-3 rounded-lg bg-white border border-gray-300 text-gray-700 text-xs font-medium hover:bg-gray-50"
                               >
                                 <Upload className="w-3.5 h-3.5" />
-                                إضافة ملفات
+                                إضافة
                               </button>
                               <button
                                 type="button"
-                                onClick={() => {
-                                  setConfirmUploadFor(slot.label)
-                                }}
+                                onClick={() => setConfirmUploadFor(slot.label)}
                                 disabled={uploading}
-                                className="py-2 px-4 rounded-lg bg-primary-600 text-white text-xs font-semibold disabled:opacity-50 hover:bg-primary-700"
+                                className="py-2 px-4 rounded-lg bg-primary-600 text-white text-xs font-semibold hover:bg-primary-700"
                               >
-                                {uploading ? 'جاري الحفظ...' : `حفظ ورفع (${pending.length})`}
+                                {uploading ? 'جاري الرفع...' : `رفع (${pending.length})`}
                               </button>
-                              <button
-                                type="button"
-                                onClick={() => {
-                                  cancelPendingFor(slot.label)
-                                }}
-                                disabled={uploading}
-                                className="py-2 px-3 rounded-lg bg-gray-200 text-gray-700 text-xs font-medium hover:bg-gray-300 disabled:opacity-50"
-                              >
+                              <button type="button" onClick={() => cancelPendingFor(slot.label)} disabled={uploading} className="py-2 px-3 rounded-lg bg-gray-200 text-gray-700 text-xs hover:bg-gray-300">
                                 إلغاء
                               </button>
                             </div>
@@ -704,28 +526,22 @@ export default function HousingApplicationDetailPage() {
                         ) : (
                           <>
                             <input
-                              ref={(el) => {
-                                fileInputRefs.current[slot.label] = el
-                              }}
+                              ref={(el) => { fileInputRefs.current[slot.label] = el }}
                               type="file"
                               multiple
                               accept=".pdf,.jpg,.jpeg,.png,.webp"
                               className="hidden"
-                              onChange={(e) => {
-                                handleFileSelectFor(slot.label, e)
-                              }}
+                              onChange={(e) => handleFileSelectFor(slot.label, e)}
                               disabled={uploading}
                             />
                             <button
                               type="button"
-                              onClick={() => {
-                                triggerFileInput(slot.label)
-                              }}
+                              onClick={() => triggerFileInput(slot.label)}
                               disabled={uploading}
-                              className="inline-flex items-center gap-1.5 py-2.5 px-4 rounded-xl bg-white border-2 border-gray-200 text-gray-700 text-sm font-medium hover:bg-gray-50 hover:border-primary-300 disabled:opacity-50"
+                              className="inline-flex items-center justify-center gap-2 py-3 px-5 rounded-xl bg-primary-600 text-white text-sm font-semibold hover:bg-primary-700 disabled:opacity-50 shadow-sm"
                             >
-                            <Upload className="w-4 h-4" />
-                            {allRejected ? 'استبدال' : hasPendingReview ? 'إضافة ملفات' : 'رفع (متعدد)'}
+                              <Upload className="w-4 h-4" />
+                              {allRejected ? 'استبدال المستند' : 'رفع مستند'}
                             </button>
                           </>
                         )}
@@ -738,22 +554,21 @@ export default function HousingApplicationDetailPage() {
           )}
         </div>
 
-        {/* بيانات الطلب (تفاصيل الاستمارة) */}
-        <div className="card mb-6">
-          <h3 className="text-sm font-semibold text-gray-900 mb-3">بيانات الطلب</h3>
-          <dl className="space-y-3 text-sm">
-            <div><dt className="text-gray-500">الاسم</dt><dd className="font-medium text-gray-900">{[app.first_name, app.last_name].filter(Boolean).join(' ') || '—'}</dd></div>
-            <div><dt className="text-gray-500">البريد</dt><dd className="font-medium text-gray-900">{app.email || '—'}</dd></div>
-            <div><dt className="text-gray-500">رقم البطاقة</dt><dd className="font-medium text-gray-900">{app.national_id || '—'}</dd></div>
-            <div><dt className="text-gray-500">تاريخ الولادة</dt><dd className="font-medium text-gray-900">{app.date_of_birth ? new Date(app.date_of_birth).toLocaleDateString('ar-TN') : '—'}</dd></div>
-            <div><dt className="text-gray-500">الحالة الاجتماعية</dt><dd className="font-medium text-gray-900">{MARITAL_LABELS[app.marital_status] || app.marital_status || '—'}</dd></div>
-            {(app.number_of_children != null && app.number_of_children > 0) && <div><dt className="text-gray-500">عدد الأطفال</dt><dd className="font-medium text-gray-900">{app.number_of_children}</dd></div>}
-            <div><dt className="text-gray-500">الولاية</dt><dd className="font-medium text-gray-900">{app.governorate || '—'}</dd></div>
-            {app.net_monthly_income != null && <div><dt className="text-gray-500">الدخل الشهري (د.ت)</dt><dd className="font-medium text-gray-900">{app.net_monthly_income}</dd></div>}
-            {app.monthly_obligations != null && <div><dt className="text-gray-500">الالتزامات الشهرية (د.ت)</dt><dd className="font-medium text-gray-900">{app.monthly_obligations}</dd></div>}
-            {app.maximum_budget != null && <div><dt className="text-gray-500">القدرة على الدفع (د.ت)</dt><dd className="font-medium text-gray-900">{app.maximum_budget}</dd></div>}
-            {app.required_area != null && <div><dt className="text-gray-500">المساحة المطلوبة (م²)</dt><dd className="font-medium text-gray-900">{app.required_area}</dd></div>}
-            {app.desired_housing_type && <div><dt className="text-gray-500">نوع السكن المطلوب</dt><dd className="font-medium text-gray-900">{app.desired_housing_type === 'apartment' ? 'شقة' : app.desired_housing_type}</dd></div>}
+        {/* ملخص الطلب */}
+        <div className="rounded-2xl bg-white border border-gray-200 shadow-sm p-5">
+          <h3 className="text-base font-bold text-gray-900 mb-4">ملخص الطلب</h3>
+          <dl className="grid grid-cols-1 sm:grid-cols-2 gap-x-6 gap-y-3 text-sm">
+            <div><dt className="text-gray-500 text-xs font-medium">الاسم</dt><dd className="font-medium text-gray-900 mt-0.5">{[app.first_name, app.last_name].filter(Boolean).join(' ') || '—'}</dd></div>
+            <div><dt className="text-gray-500 text-xs font-medium">البريد</dt><dd className="font-medium text-gray-900 mt-0.5 truncate" title={app.email || ''}>{app.email || '—'}</dd></div>
+            <div><dt className="text-gray-500 text-xs font-medium">رقم البطاقة</dt><dd className="font-medium text-gray-900 mt-0.5">{app.national_id || '—'}</dd></div>
+            <div><dt className="text-gray-500 text-xs font-medium">تاريخ الولادة</dt><dd className="font-medium text-gray-900 mt-0.5">{app.date_of_birth ? new Date(app.date_of_birth).toLocaleDateString('ar-TN') : '—'}</dd></div>
+            <div><dt className="text-gray-500 text-xs font-medium">الحالة الاجتماعية</dt><dd className="font-medium text-gray-900 mt-0.5">{MARITAL_LABELS[app.marital_status] || app.marital_status || '—'}</dd></div>
+            {(app.number_of_children != null && app.number_of_children > 0) && <div><dt className="text-gray-500 text-xs font-medium">عدد الأطفال</dt><dd className="font-medium text-gray-900 mt-0.5">{app.number_of_children}</dd></div>}
+            <div><dt className="text-gray-500 text-xs font-medium">الولاية</dt><dd className="font-medium text-gray-900 mt-0.5">{app.governorate || '—'}</dd></div>
+            {app.net_monthly_income != null && <div><dt className="text-gray-500 text-xs font-medium">الدخل الشهري (د.ت)</dt><dd className="font-medium text-gray-900 mt-0.5">{app.net_monthly_income}</dd></div>}
+            {app.maximum_budget != null && <div><dt className="text-gray-500 text-xs font-medium">القدرة على الدفع (د.ت)</dt><dd className="font-medium text-gray-900 mt-0.5">{app.maximum_budget}</dd></div>}
+            {app.required_area != null && <div><dt className="text-gray-500 text-xs font-medium">المساحة (م²)</dt><dd className="font-medium text-gray-900 mt-0.5">{app.required_area}</dd></div>}
+            {app.desired_housing_type && <div><dt className="text-gray-500 text-xs font-medium">نوع السكن</dt><dd className="font-medium text-gray-900 mt-0.5">{app.desired_housing_type === 'apartment' ? 'شقة' : app.desired_housing_type}</dd></div>}
           </dl>
         </div>
       </main>

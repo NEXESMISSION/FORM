@@ -8,6 +8,19 @@ module.exports = {
   theme: {
     extend: {
       colors: {
+        gold: {
+          50: '#FFFBF5',
+          100: '#FFF5E6',
+          200: '#E8D4B8',
+          300: '#D4B896',
+          400: '#C9A227',
+          500: '#B8860B',
+          600: '#9A7209',
+          700: '#7C5C07',
+          800: '#5E4606',
+          900: '#3D2E04',
+          950: '#1A1402',
+        },
         primary: {
           50: '#f9fafb',   // Very light gray
           100: '#f3f4f6',  // Light gray

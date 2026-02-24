@@ -1,7 +1,7 @@
 'use client'
 
-import { useState, useRef, useEffect } from 'react'
-import { X, Send, Loader2, Sparkles, Trash2 } from 'lucide-react'
+import { useState, useRef, useEffect, useCallback } from 'react'
+import { X, Send, Loader2, Sparkles, Trash2, GripVertical } from 'lucide-react'
 import { useDebouncedValue, useLocalStorage } from '@/lib/hooks'
 import { useChat } from '@/components/ChatContext'
 
@@ -15,9 +15,26 @@ const QUICK_QUESTIONS = [
   'كيف يتم التمويل؟',
 ]
 
+const WIDGET_W = 22 * 16
+const WIDGET_H = 28 * 16
+
 export default function ChatWidget() {
   const { open, setOpen, closeChat } = useChat()
   const [savedMessages, setSavedMessages, clearSavedMessages] = useLocalStorage<ChatMessage[]>('chat-history', [])
+  const [widgetPosition, setWidgetPosition] = useLocalStorage<{ left: number; top: number } | null>('chat-widget-position', null)
+  const [isDraggingPanel, setIsDraggingPanel] = useState(false)
+  const [panelStyle, setPanelStyle] = useState<React.CSSProperties>({})
+  const panelDragStart = useRef({ clientX: 0, clientY: 0, left: 0, top: 0 })
+  const panelRef = useRef<HTMLDivElement>(null)
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return
+    if (widgetPosition && window.innerWidth >= 640) {
+      setPanelStyle({ left: widgetPosition.left, top: widgetPosition.top, right: 'auto', bottom: 'auto' })
+    } else {
+      setPanelStyle({})
+    }
+  }, [widgetPosition, open])
 
   // Initialize messages with normalized timestamps from localStorage
   const [messages, setMessages] = useState<ChatMessage[]>(() => {
@@ -93,6 +110,46 @@ export default function ChatWidget() {
     setIsTyping(debouncedInput.length > 0 && debouncedInput !== input)
   }, [debouncedInput, input])
 
+  const clampPanel = useCallback((left: number, top: number) => {
+    const w = typeof window !== 'undefined' ? window.innerWidth : 400
+    const h = typeof window !== 'undefined' ? window.innerHeight : 600
+    return {
+      left: Math.max(0, Math.min(w - WIDGET_W, left)),
+      top: Math.max(0, Math.min(h - 200, top)),
+    }
+  }, [])
+
+  const handlePanelPointerDown = useCallback((e: React.PointerEvent) => {
+    const target = e.target as HTMLElement
+    if (target.closest('button') || target.closest('a')) return
+    e.preventDefault()
+    const el = panelRef.current
+    if (!el) return
+    const rect = el.getBoundingClientRect()
+    setIsDraggingPanel(true)
+    panelDragStart.current = { clientX: e.clientX, clientY: e.clientY, left: rect.left, top: rect.top }
+    el.setPointerCapture(e.pointerId)
+  }, [])
+
+  const handlePanelPointerMove = useCallback(
+    (e: React.PointerEvent) => {
+      if (!isDraggingPanel) return
+      const dx = e.clientX - panelDragStart.current.clientX
+      const dy = e.clientY - panelDragStart.current.clientY
+      const { left, top } = clampPanel(panelDragStart.current.left + dx, panelDragStart.current.top + dy)
+      panelDragStart.current = { clientX: e.clientX, clientY: e.clientY, left, top }
+      setWidgetPosition({ left, top })
+    },
+    [isDraggingPanel, clampPanel, setWidgetPosition]
+  )
+
+  const handlePanelPointerUp = useCallback((e: React.PointerEvent) => {
+    if (isDraggingPanel) {
+      panelRef.current?.releasePointerCapture(e.pointerId)
+      setIsDraggingPanel(false)
+    }
+  }, [isDraggingPanel])
+
   const send = async (question?: string) => {
     const text = question || input.trim()
     if (!text || loading) return
@@ -165,28 +222,30 @@ export default function ChatWidget() {
           />
 
           <div
-            className="fixed z-[9998] flex flex-col bg-white rounded-t-3xl shadow-xl inset-x-0 bottom-0 h-[100dvh] max-h-[100dvh] sm:inset-auto sm:right-6 sm:left-auto sm:bottom-6 sm:top-auto sm:h-[calc(100vh-3rem)] sm:max-h-[36rem] sm:min-h-[28rem] sm:w-[26rem] sm:rounded-2xl chat-container animate-in slide-up fade-in overflow-hidden border border-gray-200/80 sm:border-gray-200"
+            ref={panelRef}
+            className="fixed z-[9998] flex flex-col bg-white rounded-t-3xl shadow-xl inset-x-0 bottom-0 h-[100dvh] max-h-[100dvh] sm:inset-auto sm:right-4 sm:left-auto sm:bottom-4 sm:top-auto sm:h-[28rem] sm:min-h-[22rem] sm:w-[22rem] sm:rounded-2xl chat-container animate-in slide-up fade-in overflow-hidden border border-gray-200"
             style={{
               paddingTop: 'max(env(safe-area-inset-top, 0px), 0px)',
               paddingBottom: 'max(env(safe-area-inset-bottom, 0px), 0px)',
-              boxShadow: '0 20px 60px -15px rgba(0,0,0,0.12), 0 0 0 1px rgba(0,0,0,0.04)',
+              boxShadow: '0 20px 60px -15px rgba(0,0,0,0.12), 0 0 0 1px rgba(0,0,0,0.06)',
+              ...panelStyle,
             }}
           >
             <div
-              className="shrink-0 flex items-center justify-between px-4 sm:px-5 py-3.5 sm:py-4 text-white rounded-t-3xl sm:rounded-t-2xl relative overflow-hidden"
-              style={{
-                paddingTop: 'max(env(safe-area-inset-top, 0px), 0.875rem)',
-                background: 'linear-gradient(135deg, #1e40af 0%, #3b82f6 100%)',
-                boxShadow: '0 1px 0 0 rgba(255,255,255,0.1) inset',
-              }}
+              onPointerDown={handlePanelPointerDown}
+              onPointerMove={handlePanelPointerMove}
+              onPointerUp={handlePanelPointerUp}
+              onPointerLeave={handlePanelPointerUp}
+              className="shrink-0 flex items-center justify-between px-4 sm:px-5 py-3.5 sm:py-4 rounded-t-3xl sm:rounded-t-2xl relative overflow-hidden bg-primary-700 border-b border-primary-800 sm:cursor-grab sm:active:cursor-grabbing"
+              style={{ paddingTop: 'max(env(safe-area-inset-top, 0px), 0.875rem)' }}
             >
-            <div className="flex items-center gap-3 relative z-10">
-              <div className="p-2 rounded-xl bg-white/20 backdrop-blur-sm border border-white/20">
-                <Sparkles className="w-5 h-5" />
+            <div className="flex items-center gap-3 relative z-10 min-w-0">
+              <div className="p-2 rounded-xl bg-primary-600 border border-primary-500 shrink-0">
+                <Sparkles className="w-5 h-5 text-primary-100" />
               </div>
-              <div>
-                <span className="font-bold text-base block leading-tight">دردشة دوموبات</span>
-                <span className="text-xs text-white/90 mt-0.5">مساعدك الذكي</span>
+              <div className="flex items-center gap-2 min-w-0">
+                <span className="font-bold text-base text-white truncate">دردشة دوموبات</span>
+                <span className="hidden sm:inline" aria-hidden title="اسحب لتحريك"><GripVertical className="w-4 h-4 text-primary-300 shrink-0" /></span>
               </div>
             </div>
             <div className="flex items-center gap-1.5 relative z-10">
@@ -199,7 +258,7 @@ export default function ChatWidget() {
                       clearSavedMessages()
                     }
                   }}
-                  className="p-2 rounded-xl hover:bg-white/20 transition-all hover:scale-110 active:scale-95"
+                  className="p-2 rounded-xl hover:bg-primary-600 transition-all hover:scale-110 active:scale-95 text-white"
                   title="حذف المحادثة"
                 >
                   <Trash2 className="w-4 h-4" />
@@ -208,7 +267,7 @@ export default function ChatWidget() {
               <button 
                 type="button" 
                 onClick={() => closeChat()} 
-                className="p-2 rounded-xl hover:bg-white/20 transition-all hover:scale-110 active:scale-95"
+                className="p-2 rounded-xl hover:bg-primary-600 transition-all hover:scale-110 active:scale-95 text-white"
               >
                 <X className="w-5 h-5" />
               </button>
@@ -216,13 +275,13 @@ export default function ChatWidget() {
           </div>
           <div
             ref={listRef}
-            className="flex-1 overflow-y-auto p-4 sm:p-5 space-y-3 min-h-0 chat-messages-container bg-gray-50/30 sm:bg-white border-t border-gray-100"
+            className="flex-1 overflow-y-auto p-4 sm:p-5 space-y-3 min-h-0 chat-messages-container bg-gray-50/50 sm:bg-white border-t border-gray-200"
           >
             {messages.length === 0 && (
               <div className="space-y-4">
-                <div className="rounded-2xl bg-blue-50/80 sm:bg-gray-50 border border-blue-100/80 sm:border-gray-200 px-4 sm:px-5 py-4 sm:py-5 text-right">
+                <div className="rounded-2xl bg-primary-50/80 sm:bg-gray-50 border border-primary-200 sm:border-gray-200 px-4 sm:px-5 py-4 sm:py-5 text-right">
                   <div className="flex items-center gap-3 mb-3">
-                    <div className="p-2.5 rounded-xl bg-blue-500 text-white">
+                    <div className="p-2.5 rounded-xl bg-primary-600 text-white">
                       <Sparkles className="w-5 h-5" />
                     </div>
                     <div>
@@ -236,7 +295,7 @@ export default function ChatWidget() {
                       <button
                         key={idx}
                         onClick={() => send(q)}
-                        className="px-3 py-2 text-xs rounded-xl bg-white border border-gray-200 hover:border-blue-300 hover:bg-blue-50/50 text-gray-700 hover:text-blue-700 transition-colors text-right touch-manipulation font-medium"
+                        className="px-3 py-2 text-xs rounded-xl bg-white border border-gray-200 hover:border-primary-300 hover:bg-primary-50 text-gray-700 hover:text-primary-800 transition-colors text-right touch-manipulation font-medium"
                         style={{ WebkitTapHighlightColor: 'transparent' }}
                       >
                         {q}
@@ -251,13 +310,13 @@ export default function ChatWidget() {
                 <div
                   className={`max-w-[85%] sm:max-w-[80%] px-4 py-3 rounded-2xl text-sm ${
                     m.role === 'user'
-                      ? 'bg-blue-600 text-white rounded-tr-md'
+                      ? 'bg-primary-600 text-white rounded-tr-md'
                       : 'bg-gray-100 text-gray-900 rounded-tl-md border border-gray-200'
                   }`}
                 >
                   <p className="whitespace-pre-wrap leading-relaxed">{m.content}</p>
                   {m.timestamp && (
-                    <p className={`text-xs mt-2 ${m.role === 'user' ? 'text-blue-200' : 'text-gray-500'}`}>
+                    <p className={`text-xs mt-2 ${m.role === 'user' ? 'text-primary-200' : 'text-gray-500'}`}>
                       {(() => {
                         const timestamp = typeof m.timestamp === 'string' ? new Date(m.timestamp) : m.timestamp
                         return timestamp instanceof Date ? timestamp.toLocaleTimeString('ar-TN', { hour: '2-digit', minute: '2-digit' }) : ''
@@ -305,7 +364,7 @@ export default function ChatWidget() {
                     key={idx}
                     onClick={() => send(q)}
                     disabled={loading}
-                    className="px-3 py-1.5 text-xs rounded-lg bg-gray-50 border border-gray-200 hover:border-blue-300 hover:bg-blue-50/50 text-gray-700 disabled:opacity-50 transition-colors"
+                    className="px-3 py-1.5 text-xs rounded-lg bg-gray-50 border border-gray-200 hover:border-primary-300 hover:bg-primary-50 text-gray-700 disabled:opacity-50 transition-colors"
                     style={{ WebkitTapHighlightColor: 'transparent' }}
                   >
                     {q}
@@ -326,10 +385,10 @@ export default function ChatWidget() {
                   }
                 }}
                 placeholder="اكتب سؤالك هنا..."
-                className="flex-1 px-4 py-3 rounded-xl border border-gray-200 bg-gray-50/50 focus:bg-white text-sm focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 outline-none transition-all"
+                className="flex-1 px-4 py-3 rounded-xl border border-gray-300 bg-gray-50 focus:bg-white text-sm focus:ring-2 focus:ring-primary-300 focus:border-primary-500 outline-none transition-all"
                 disabled={loading}
                 style={{ 
-                  fontSize: '16px', // Prevents zoom on iOS
+                  fontSize: '16px',
                   WebkitAppearance: 'none'
                 }}
               />
@@ -337,7 +396,7 @@ export default function ChatWidget() {
                 type="button"
                 onClick={() => send()}
                 disabled={loading || !input.trim()}
-                className="p-3 rounded-xl text-white disabled:opacity-50 disabled:pointer-events-none bg-blue-600 hover:bg-blue-700 active:scale-95 transition-colors"
+                className="p-3 rounded-xl text-white disabled:opacity-50 disabled:pointer-events-none bg-primary-600 hover:bg-primary-700 active:scale-95 transition-colors"
                 title="إرسال"
               >
                 {loading ? (

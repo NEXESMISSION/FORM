@@ -1,11 +1,12 @@
 'use client'
 
-import { useEffect, useState, useRef } from 'react'
+import { useEffect, useState, useRef, Suspense } from 'react'
 import { useRouter } from 'next/navigation'
 import { supabase } from '@/lib/supabase'
 import Link from 'next/link'
 import { FileText, Home, TrendingUp, LogOut, User, Plus } from 'lucide-react'
 import toast from 'react-hot-toast'
+import { ApplicantDashboardContent } from '@/app/dashboard/applicant/_page_full'
 
 export default function DashboardPage() {
   const router = useRouter()
@@ -18,20 +19,11 @@ export default function DashboardPage() {
     checkUser()
   }, [])
 
-  // Redirect based on role after profile is loaded
+  // Redirect only admin to /dashboard/admin; applicants stay on /dashboard and see their content here
   useEffect(() => {
-    if (!loading && profile && !hasRedirected.current) {
-      const role = profile.role
-      if (role === 'applicant' || role === 'admin') {
-        hasRedirected.current = true
-        setTimeout(() => {
-          if (role === 'applicant') {
-            router.replace('/dashboard/applicant')
-          } else if (role === 'admin') {
-            router.replace('/dashboard/admin')
-          }
-        }, 0)
-      }
+    if (!loading && profile && !hasRedirected.current && profile.role === 'admin') {
+      hasRedirected.current = true
+      router.replace('/dashboard/admin')
     }
   }, [profile, loading, router])
 
@@ -163,8 +155,17 @@ export default function DashboardPage() {
     )
   }
 
-  // Show loading while redirecting
-  if (profile.role === 'applicant' || profile.role === 'admin') {
+  // Applicant: show applicant dashboard on /dashboard (no redirect to /dashboard/applicant)
+  if (profile.role === 'applicant') {
+    return (
+      <Suspense fallback={<div className="min-h-screen flex items-center justify-center bg-surface"><div className="spinner w-8 h-8 text-primary-600" /></div>}>
+        <ApplicantDashboardContent />
+      </Suspense>
+    )
+  }
+
+  // Admin: show loading while redirecting to /dashboard/admin
+  if (profile.role === 'admin') {
     return (
       <div className="min-h-screen flex items-center justify-center">
         <div className="spinner w-8 h-8"></div>

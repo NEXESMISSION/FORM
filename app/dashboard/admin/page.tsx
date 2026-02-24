@@ -49,14 +49,6 @@ const PURCHASE_STATUS_LABELS: Record<string, string> = {
   rejected: 'مرفوض',
 }
 
-const PROGRESS_STAGES: { value: string; label: string }[] = [
-  { value: 'study', label: 'دراسة المشروع' },
-  { value: 'design', label: 'التصميم' },
-  { value: 'construction', label: 'البناء' },
-  { value: 'finishing', label: 'التشطيب' },
-  { value: 'ready', label: 'جاهز للتسليم' },
-]
-
 function getProjectTiming(project: any) {
   const today = new Date()
   today.setHours(0, 0, 0, 0)
@@ -83,7 +75,7 @@ export default function AdminDashboard() {
   const [applications, setApplications] = useState<any[]>([])
   const [projects, setProjects] = useState<any[]>([])
   const [directPurchases, setDirectPurchases] = useState<any[]>([])
-  const [activeTab, setActiveTab] = useState<'applications' | 'projects' | 'documents' | 'reports' | 'purchases'>('applications')
+  const [activeTab, setActiveTab] = useState<'applications' | 'projects' | 'documents' | 'stages' | 'reports' | 'purchases'>('applications')
   const [loading, setLoading] = useState(true)
   const [showProjectForm, setShowProjectForm] = useState(false)
   const [editingProject, setEditingProject] = useState<any>(null)
@@ -108,6 +100,14 @@ export default function AdminDashboard() {
   const [progressStage, setProgressStage] = useState('')
   const [progressPercentage, setProgressPercentage] = useState(0)
   const [progressNotes, setProgressNotes] = useState('')
+  const [progressStages, setProgressStages] = useState<{ id: string; value: string | null; label_ar: string; sort_order: number; is_system: boolean }[]>([])
+  const [progressStageManage, setProgressStageManage] = useState(false)
+  const [newProgressStageLabel, setNewProgressStageLabel] = useState('')
+  const [editingProgressStageId, setEditingProgressStageId] = useState<string | null>(null)
+  const [editingProgressStageLabel, setEditingProgressStageLabel] = useState('')
+  const [customStagesForItem, setCustomStagesForItem] = useState<string[] | null>(null)
+  const [customStageNewLabel, setCustomStageNewLabel] = useState('')
+  const [showCustomStagesEditor, setShowCustomStagesEditor] = useState(false)
   const [newDocLabel, setNewDocLabel] = useState('')
   const [docsLoading, setDocsLoading] = useState(false)
   const [filters, setFilters] = useState({
@@ -131,17 +131,18 @@ export default function AdminDashboard() {
       const { data: { user } } = await supabase.auth.getUser()
       if (!user) {
         router.push('/auth/login')
+        setLoading(false)
         return
       }
-      const { data: profile } = await supabase
+      const { data: profile, error: profileError } = await supabase
         .from('profiles')
         .select('role')
         .eq('id', user.id)
-        .single()
+        .maybeSingle()
 
-      if (profile?.role !== 'admin') {
-        if (profile?.role === 'applicant') router.replace('/dashboard/applicant')
-        else router.replace('/dashboard')
+      if (profileError || !profile || profile.role !== 'admin') {
+        router.replace('/projects')
+        setLoading(false)
         return
       }
       setUser(user)
@@ -175,7 +176,7 @@ export default function AdminDashboard() {
         .select(`
           *,
           profiles:user_id (id, name, email, phone_number),
-          projects:project_id (id, name)
+          projects:project_id (id, name, custom_progress_stages)
         `)
         .order('created_at', { ascending: false })
       setDirectPurchases(purchases || [])
@@ -189,9 +190,34 @@ export default function AdminDashboard() {
       } catch (_) {
         setRequiredDocTypes([])
       }
+
+      try {
+        const { data: stages } = await supabase
+          .from('progress_stages')
+          .select('id, value, label_ar, sort_order, is_system')
+          .order('sort_order', { ascending: true })
+        setProgressStages((stages as any) || [])
+      } catch (_) {
+        setProgressStages([])
+      }
     } catch {
       toast.error('فشل تحميل البيانات')
     }
+  }
+
+  const loadProgressStages = async () => {
+    const { data } = await supabase
+      .from('progress_stages')
+      .select('id, value, label_ar, sort_order, is_system')
+      .order('sort_order', { ascending: true })
+    setProgressStages((data as any) || [])
+  }
+
+  const resolveProgressStageSelectValue = (saved: string | null | undefined) => {
+    const v = saved || ''
+    if (!v) return ''
+    const s = progressStages.find(x => x.value === v || x.label_ar === v)
+    return s ? (s.value ?? s.id) : v
   }
 
   const loadRequiredDocTypes = async () => {
@@ -420,8 +446,8 @@ export default function AdminDashboard() {
 
   if (loading) {
     return (
-      <div className="min-h-screen bg-surface flex items-center justify-center">
-        <div className="spinner w-8 h-8" />
+      <div className="min-h-screen bg-gold-50 flex items-center justify-center">
+        <div className="spinner w-8 h-8 text-gold-600" />
       </div>
     )
   }
@@ -431,19 +457,21 @@ export default function AdminDashboard() {
     { id: 'purchases', label: 'طلبات الشراء', icon: ShoppingCart },
     { id: 'projects', label: 'المشاريع', icon: Home },
     { id: 'documents', label: 'المستندات المطلوبة', icon: FileText },
+    { id: 'stages', label: 'مراحل التقدم', icon: CalendarCheck },
     { id: 'reports', label: 'التقارير', icon: BarChart3 },
   ]
 
   return (
-    <div className="min-h-screen bg-surface">
-      <header className="sticky top-0 z-10 bg-white/95 backdrop-blur border-b border-gray-100">
-        <div className="max-w-[28rem] sm:max-w-2xl md:max-w-4xl mx-auto px-3 sm:px-4 h-20 flex justify-between items-center gap-2">
+    <div className="min-h-screen bg-gold-50">
+      <header className="sticky top-0 z-10 bg-gold-50/95 backdrop-blur border-b-2 border-gold-200 safe-top">
+        <div className="max-w-[28rem] sm:max-w-2xl md:max-w-4xl mx-auto px-3 sm:px-4 h-16 sm:h-20 flex justify-between items-center gap-2">
           <div className="flex items-center min-w-0">
-            <Image src="/logo.png" alt="DOMOBAT" width={112} height={112} className="rounded-2xl shrink-0 w-auto h-auto" style={{ width: 'auto', height: 'auto' }} priority />
+            <Image src="/logo.png" alt="DOMOBAT" width={80} height={80} className="rounded-2xl shrink-0 w-14 h-14 sm:w-16 sm:h-16 object-contain" style={{ width: 'auto', height: 'auto' }} priority />
           </div>
+          <span className="text-sm font-semibold text-gold-900 hidden sm:inline">لوحة الإدارة</span>
           <button
             onClick={handleLogout}
-            className="flex items-center gap-1.5 sm:gap-2 text-gray-600 text-xs sm:text-sm font-medium hover:text-gray-900 py-2 px-2"
+            className="flex items-center gap-1.5 sm:gap-2 text-gold-700 text-xs sm:text-sm font-medium hover:text-gold-950 hover:bg-gold-100 py-2.5 px-3 rounded-xl transition-colors touch-manipulation"
           >
             <LogOut className="w-4 h-4 shrink-0" />
             خروج
@@ -451,30 +479,30 @@ export default function AdminDashboard() {
         </div>
       </header>
 
-      <div className="max-w-[28rem] sm:max-w-2xl md:max-w-4xl mx-auto px-3 sm:px-4 py-4 sm:py-6 pb-10">
-        {/* إحصائيات — مضغوطة على الموبايل */}
-        <div className="flex sm:grid sm:grid-cols-3 gap-2 sm:gap-3 mb-4 sm:mb-6">
-          <div className="flex-1 sm:flex-none card rounded-xl sm:rounded-2xl p-3 sm:p-4 flex flex-col sm:block justify-center min-w-0">
-            <p className="text-lg sm:text-2xl font-bold text-gray-900 tabular-nums">{stats.totalApplications}</p>
-            <p className="text-xs sm:text-sm text-gray-600 truncate">الطلبات</p>
+      <div className="max-w-[28rem] sm:max-w-2xl md:max-w-4xl mx-auto px-3 sm:px-4 py-4 sm:py-6 pb-10 safe-bottom">
+        {/* إحصائيات */}
+        <div className="flex sm:grid sm:grid-cols-3 gap-3 sm:gap-4 mb-5 sm:mb-6">
+          <div className="flex-1 sm:flex-none rounded-2xl border-2 border-gold-200 bg-white p-4 sm:p-5 shadow-sm flex flex-col justify-center min-w-0">
+            <p className="text-xl sm:text-2xl font-bold text-gold-900 tabular-nums">{stats.totalApplications}</p>
+            <p className="text-xs sm:text-sm text-gold-600 truncate mt-0.5">الطلبات</p>
           </div>
-          <div className="flex-1 sm:flex-none card rounded-xl sm:rounded-2xl p-3 sm:p-4 flex flex-col sm:block justify-center min-w-0">
-            <p className="text-lg sm:text-2xl font-bold text-red-600 tabular-nums">{stats.highPriority}</p>
-            <p className="text-xs sm:text-sm text-gray-600 truncate">عالي</p>
+          <div className="flex-1 sm:flex-none rounded-2xl border-2 border-gold-200 bg-white p-4 sm:p-5 shadow-sm flex flex-col justify-center min-w-0">
+            <p className="text-xl sm:text-2xl font-bold text-red-600 tabular-nums">{stats.highPriority}</p>
+            <p className="text-xs sm:text-sm text-gold-600 truncate mt-0.5">أولوية عالية</p>
           </div>
-          <div className="flex-1 sm:flex-none card rounded-xl sm:rounded-2xl p-3 sm:p-4 flex flex-col sm:block justify-center min-w-0">
-            <p className="text-lg sm:text-2xl font-bold text-primary-600 tabular-nums">{stats.totalProjects}</p>
-            <p className="text-xs sm:text-sm text-gray-600 truncate">المشاريع</p>
+          <div className="flex-1 sm:flex-none rounded-2xl border-2 border-gold-200 bg-white p-4 sm:p-5 shadow-sm flex flex-col justify-center min-w-0">
+            <p className="text-xl sm:text-2xl font-bold text-gold-600 tabular-nums">{stats.totalProjects}</p>
+            <p className="text-xs sm:text-sm text-gold-600 truncate mt-0.5">المشاريع</p>
           </div>
         </div>
 
-        {/* تبويبات — قائمة منسدلة على الموبايل، أزرار على الشاشات الأكبر */}
-        <div className="mb-4">
+        {/* تبويبات */}
+        <div className="mb-5">
           <div className="sm:hidden">
             <select
               value={activeTab}
               onChange={(e) => setActiveTab(e.target.value as typeof activeTab)}
-              className="w-full input text-sm py-3 rounded-xl border-gray-200 bg-white"
+              className="w-full text-sm py-3.5 px-4 rounded-xl border-2 border-gold-300 bg-white text-gold-900 focus:ring-2 focus:ring-gold-400/50 focus:border-gold-500 outline-none"
             >
               {tabOptions.map(({ id, label }) => (
                 <option key={id} value={id}>{label}</option>
@@ -486,7 +514,11 @@ export default function AdminDashboard() {
               <button
                 key={id}
                 onClick={() => setActiveTab(id)}
-                className={`pill shrink-0 flex items-center gap-2 ${activeTab === id ? 'pill-active' : 'pill-inactive'}`}
+                className={`shrink-0 flex items-center gap-2 py-2.5 px-4 rounded-xl text-sm font-medium transition-all ${
+                  activeTab === id
+                    ? 'bg-gradient-to-b from-gold-400 to-gold-600 text-white shadow-md'
+                    : 'bg-white border-2 border-gold-200 text-gold-800 hover:border-gold-300 hover:bg-gold-50'
+                }`}
               >
                 <Icon className="w-4 h-4" />
                 {label}
@@ -497,18 +529,18 @@ export default function AdminDashboard() {
 
         {/* تبويب الطلبات */}
         {activeTab === 'applications' && (
-          <div className="card rounded-2xl sm:rounded-3xl">
+          <div className="rounded-2xl sm:rounded-3xl border-2 border-gold-200 bg-white p-4 sm:p-5 shadow-sm">
             <div className="flex flex-col sm:flex-row sm:justify-between sm:items-center gap-2 sm:gap-3 mb-4">
-              <h2 className="text-base sm:text-lg font-bold text-gray-900">طلبات السكن</h2>
-              <span className="text-sm text-gray-500">{filteredApplications.length} طلب</span>
+              <h2 className="text-base sm:text-lg font-bold text-gold-950">طلبات السكن</h2>
+              <span className="text-sm text-gold-600">{filteredApplications.length} طلب</span>
             </div>
 
-            {/* فلاتر — زر على الموبايل، شبكة على الشاشات الأكبر */}
+            {/* فلاتر */}
             <div className="mb-4 sm:mb-5">
               <button
                 type="button"
                 onClick={() => setShowFiltersMobile(!showFiltersMobile)}
-                className="sm:hidden w-full flex items-center justify-center gap-2 py-2.5 rounded-xl border border-gray-200 bg-gray-50 text-gray-700 text-sm font-medium"
+                className="sm:hidden w-full flex items-center justify-center gap-2 py-2.5 rounded-xl border-2 border-gold-300 bg-gold-50 text-gold-800 text-sm font-medium hover:bg-gold-100"
               >
                 <SlidersHorizontal className="w-4 h-4" />
                 فلاتر
@@ -518,7 +550,7 @@ export default function AdminDashboard() {
                 <select
                   value={filters.governorate}
                   onChange={(e) => setFilters({ ...filters, governorate: e.target.value })}
-                  className="input text-sm"
+                  className="w-full px-3 py-2.5 text-sm rounded-xl border-2 border-gold-200 bg-white text-gold-900 focus:ring-2 focus:ring-gold-400/50 focus:border-gold-500 outline-none"
                 >
                   <option value="">كل الولايات</option>
                   {Object.keys(governorateStats).map(gov => (
@@ -528,7 +560,7 @@ export default function AdminDashboard() {
                 <select
                   value={filters.priority}
                   onChange={(e) => setFilters({ ...filters, priority: e.target.value })}
-                  className="input text-sm"
+                  className="w-full px-3 py-2.5 text-sm rounded-xl border-2 border-gold-200 bg-white text-gold-900 focus:ring-2 focus:ring-gold-400/50 focus:border-gold-500 outline-none"
                 >
                   <option value="">كل الأولويات</option>
                   <option value="high">عالي</option>
@@ -538,7 +570,7 @@ export default function AdminDashboard() {
                 <select
                   value={filters.status}
                   onChange={(e) => setFilters({ ...filters, status: e.target.value })}
-                  className="input text-sm"
+                  className="w-full px-3 py-2.5 text-sm rounded-xl border-2 border-gold-200 bg-white text-gold-900 focus:ring-2 focus:ring-gold-400/50 focus:border-gold-500 outline-none"
                 >
                   <option value="">كل الحالات</option>
                   {Object.entries(APP_STATUS_LABELS).map(([val, label]) => (
@@ -548,7 +580,7 @@ export default function AdminDashboard() {
                 <select
                   value={filters.incomeRange}
                   onChange={(e) => setFilters({ ...filters, incomeRange: e.target.value })}
-                  className="input text-sm"
+                  className="w-full px-3 py-2.5 text-sm rounded-xl border-2 border-gold-200 bg-white text-gold-900 focus:ring-2 focus:ring-gold-400/50 focus:border-gold-500 outline-none"
                 >
                   <option value="">كل المداخيل</option>
                   {incomeRanges.map(range => (
@@ -558,7 +590,7 @@ export default function AdminDashboard() {
                 <select
                   value={filters.bank}
                   onChange={(e) => setFilters({ ...filters, bank: e.target.value })}
-                  className="input text-sm"
+                  className="w-full px-3 py-2.5 text-sm rounded-xl border-2 border-gold-200 bg-white text-gold-900 focus:ring-2 focus:ring-gold-400/50 focus:border-gold-500 outline-none"
                 >
                   <option value="">كل البنوك</option>
                   {uniqueBanks.map(bank => (
@@ -568,27 +600,27 @@ export default function AdminDashboard() {
               </div>
             </div>
 
-            {/* جدول على الشاشات الكبيرة، كروت على الموبايل */}
-            <div className="hidden md:block overflow-x-auto -mx-2">
+            {/* جدول */}
+            <div className="hidden md:block overflow-x-auto -mx-2 rounded-xl border-2 border-gold-200 overflow-hidden">
               <table className="w-full min-w-[600px]">
                 <thead>
-                  <tr className="border-b border-gray-200">
-                    <th className="px-3 py-3 text-right text-xs font-semibold text-gray-600">الاسم</th>
-                    <th className="px-3 py-3 text-right text-xs font-semibold text-gray-600">الولاية</th>
-                    <th className="px-3 py-3 text-right text-xs font-semibold text-gray-600">الميزانية</th>
-                    <th className="px-3 py-3 text-right text-xs font-semibold text-gray-600">النقاط</th>
-                    <th className="px-3 py-3 text-right text-xs font-semibold text-gray-600">الأولوية</th>
-                    <th className="px-3 py-3 text-right text-xs font-semibold text-gray-600">الحالة</th>
-                    <th className="px-3 py-3 text-right text-xs font-semibold text-gray-600">التاريخ</th>
+                  <tr className="border-b-2 border-gold-200 bg-gold-50/80">
+                    <th className="px-4 py-4 text-right text-sm font-semibold text-gold-800">الاسم</th>
+                    <th className="px-4 py-4 text-right text-sm font-semibold text-gold-800">الولاية</th>
+                    <th className="px-4 py-4 text-right text-sm font-semibold text-gold-800">الميزانية</th>
+                    <th className="px-4 py-4 text-right text-sm font-semibold text-gold-800">النقاط</th>
+                    <th className="px-4 py-4 text-right text-sm font-semibold text-gold-800">الأولوية</th>
+                    <th className="px-4 py-4 text-right text-sm font-semibold text-gold-800">الحالة والإجراءات</th>
+                    <th className="px-4 py-4 text-right text-sm font-semibold text-gold-800">التاريخ</th>
                   </tr>
                 </thead>
-                <tbody className="divide-y divide-gray-100">
+                <tbody className="divide-y divide-gold-100 bg-white">
                   {filteredApplications.map((app) => (
-                    <tr key={app.id} className="hover:bg-gray-50/80">
-                      <td className="px-3 py-3 text-sm">{app.first_name} {app.last_name}</td>
-                      <td className="px-3 py-3 text-sm">{app.governorate || '—'}</td>
-                      <td className="px-3 py-3 text-sm">{app.maximum_budget ? `${Number(app.maximum_budget).toLocaleString('ar-TN')} د.ت` : '—'}</td>
-                      <td className="px-3 py-3">
+                    <tr key={app.id} className="hover:bg-gold-50/50 transition-colors">
+                      <td className="px-4 py-4 text-sm">{app.first_name} {app.last_name}</td>
+                      <td className="px-4 py-4 text-sm">{app.governorate || '—'}</td>
+                      <td className="px-4 py-4 text-sm">{app.maximum_budget ? `${Number(app.maximum_budget).toLocaleString('ar-TN')} د.ت` : '—'}</td>
+                      <td className="px-4 py-4">
                         <span className={`font-semibold text-sm ${
                           (app.application_score || 0) >= 80 ? 'text-green-600' :
                           (app.application_score || 0) >= 50 ? 'text-amber-600' : 'text-gray-600'
@@ -596,7 +628,7 @@ export default function AdminDashboard() {
                           {app.application_score ?? 0}
                         </span>
                       </td>
-                      <td className="px-3 py-3">
+                      <td className="px-4 py-4">
                         <span className={`px-2 py-1 rounded-lg text-xs font-medium ${
                           app.priority_level === 'high' ? 'bg-red-100 text-red-800' :
                           app.priority_level === 'medium' ? 'bg-amber-100 text-amber-800' :
@@ -605,20 +637,21 @@ export default function AdminDashboard() {
                           {PRIORITY_LABELS[app.priority_level] || app.priority_level || '—'}
                         </span>
                       </td>
-                      <td className="px-3 py-3">
+                      <td className="px-4 py-4">
                         <div className="flex flex-wrap items-center gap-2">
                           <button
                             type="button"
                             onClick={() => setShowDetailApp(app)}
-                            className="p-1.5 rounded-lg bg-gray-100 hover:bg-gray-200 text-gray-700"
+                            className="inline-flex items-center gap-1.5 py-2 px-3 rounded-xl border-2 border-gold-300 bg-gold-50 hover:bg-gold-100 text-gold-800 text-sm font-medium transition-colors"
                             title="عرض كل التفاصيل"
                           >
                             <Eye className="w-4 h-4" />
+                            عرض
                           </button>
                           <select
                             value={app.status}
                             onChange={(e) => updateAppStatus(app.id, e.target.value, app.status)}
-                            className="input text-sm py-2 w-32"
+                            className="px-3 py-2 text-sm rounded-xl border-2 border-gold-200 bg-white text-gold-900 focus:ring-2 focus:ring-gold-400/50 focus:border-gold-500 outline-none w-40"
                           >
                             {Object.entries(APP_STATUS_LABELS).map(([val, label]) => (
                               <option key={val} value={val}>{label}</option>
@@ -629,11 +662,14 @@ export default function AdminDashboard() {
                               type="button"
                               onClick={() => {
                                 setShowProgressModal(app)
-                                setProgressStage(app.progress_stage || '')
+                                setProgressStage(resolveProgressStageSelectValue(app.progress_stage))
                                 setProgressPercentage(app.progress_percentage || 0)
                                 setProgressNotes(app.progress_notes || '')
+                                const custom = app.custom_progress_stages
+                                setCustomStagesForItem(Array.isArray(custom) ? custom : null)
+                                setShowCustomStagesEditor(false)
                               }}
-                              className="text-xs text-primary-600 hover:text-primary-700 font-medium"
+                              className="inline-flex items-center gap-1.5 py-2 px-3 rounded-xl border-2 border-amber-300 bg-amber-50 hover:bg-amber-100 text-amber-800 text-sm font-medium"
                               title="تحديث التقدم"
                             >
                               التقدم
@@ -642,8 +678,9 @@ export default function AdminDashboard() {
                           <button
                             type="button"
                             onClick={() => setShowDocsModalApp(app)}
-                            className="text-xs text-gray-600 hover:text-gray-900 font-medium"
+                            className="inline-flex items-center gap-1.5 py-2 px-3 rounded-xl border-2 border-gold-300 bg-white hover:bg-gold-50 text-gold-800 text-sm font-medium"
                           >
+                            <FileText className="w-4 h-4" />
                             المستندات
                           </button>
                           <button
@@ -655,13 +692,14 @@ export default function AdminDashboard() {
                               const existing = requiredDocTypes.filter(d => d.active && msg.includes(d.label_ar)).map(d => d.label_ar)
                               setRequestDocsSelectedTypes(existing)
                             }}
-                            className="text-xs text-primary-600 hover:text-primary-700 font-medium"
+                            className="inline-flex items-center gap-1.5 py-2 px-3 rounded-xl border-2 border-gold-400 bg-gold-100 hover:bg-gold-200 text-gold-900 text-sm font-medium"
                           >
+                            <FilePlus className="w-4 h-4" />
                             طلب مستندات
                           </button>
                         </div>
                       </td>
-                      <td className="px-3 py-3 text-sm text-gray-500">
+                      <td className="px-4 py-4 text-sm text-gold-600">
                         {new Date(app.created_at).toLocaleDateString('ar-TN')}
                       </td>
                     </tr>
@@ -671,12 +709,12 @@ export default function AdminDashboard() {
             </div>
 
             {/* كروت للموبايل */}
-            <div className="md:hidden space-y-3">
+            <div className="md:hidden space-y-5">
               {filteredApplications.map((app) => (
-                <div key={app.id} className="rounded-2xl border border-gray-100 bg-gray-50/50 p-4 space-y-2">
-                  <div className="flex justify-between items-start">
-                    <span className="font-semibold text-gray-900">{app.first_name} {app.last_name}</span>
-                    <span className={`px-2 py-1 rounded-lg text-xs font-medium ${
+                <div key={app.id} className="rounded-2xl border-2 border-gold-200 bg-white p-5 sm:p-6 shadow-sm">
+                  <div className="flex justify-between items-start gap-3 mb-4">
+                    <h3 className="text-lg font-bold text-gold-900">{app.first_name} {app.last_name}</h3>
+                    <span className={`shrink-0 px-3 py-1.5 rounded-xl text-sm font-medium ${
                       app.priority_level === 'high' ? 'bg-red-100 text-red-800' :
                       app.priority_level === 'medium' ? 'bg-amber-100 text-amber-800' :
                       'bg-gray-100 text-gray-700'
@@ -684,41 +722,46 @@ export default function AdminDashboard() {
                       {PRIORITY_LABELS[app.priority_level] || app.priority_level || '—'}
                     </span>
                   </div>
-                  <div className="flex flex-wrap gap-2 text-sm text-gray-600">
-                    <span>{app.governorate || '—'}</span>
-                    <span>•</span>
-                    <span>{app.maximum_budget ? `${Number(app.maximum_budget).toLocaleString('ar-TN')} د.ت` : '—'}</span>
-                    <span>•</span>
-                    <span>نقاط: {app.application_score ?? 0}</span>
+                  <div className="space-y-2 text-sm text-gold-700 mb-4">
+                    <p><span className="text-gold-500 font-medium">الولاية:</span> {app.governorate || '—'}</p>
+                    <p><span className="text-gold-500 font-medium">الميزانية:</span> {app.maximum_budget ? `${Number(app.maximum_budget).toLocaleString('ar-TN')} د.ت` : '—'}</p>
+                    <p><span className="text-gold-500 font-medium">النقاط:</span> <span className="font-semibold">{app.application_score ?? 0}</span></p>
                   </div>
-                  <div className="flex flex-wrap items-center gap-2 pt-2">
-                    <button
-                      type="button"
-                      onClick={() => setShowDetailApp(app)}
-                      className="p-2 rounded-lg bg-gray-100 text-gray-700 shrink-0"
-                      title="عرض كل التفاصيل"
-                    >
-                      <Eye className="w-4 h-4" />
-                    </button>
+                  <div className="mb-4">
+                    <span className="text-gold-500 text-sm font-medium block mb-1">الحالة</span>
                     <select
                       value={app.status}
                       onChange={(e) => updateAppStatus(app.id, e.target.value, app.status)}
-                      className="input text-sm py-2 flex-1 min-w-0"
+                      className="w-full px-4 py-3 text-base rounded-xl border-2 border-gold-200 bg-white text-gold-900 focus:ring-2 focus:ring-gold-400/50 focus:border-gold-500 outline-none"
                     >
                       {Object.entries(APP_STATUS_LABELS).map(([val, label]) => (
                         <option key={val} value={val}>{label}</option>
                       ))}
                     </select>
+                  </div>
+                  <div className="flex flex-wrap gap-2 mb-4">
+                    <button
+                      type="button"
+                      onClick={() => setShowDetailApp(app)}
+                      className="inline-flex items-center gap-2 py-3 px-4 rounded-xl border-2 border-gold-300 bg-gold-50 hover:bg-gold-100 text-gold-800 font-medium"
+                      title="عرض كل التفاصيل"
+                    >
+                      <Eye className="w-4 h-4" />
+                      عرض التفاصيل
+                    </button>
                     {app.status === 'approved' && (
                       <button
                         type="button"
                         onClick={() => {
                           setShowProgressModal(app)
-                          setProgressStage(app.progress_stage || '')
+                          setProgressStage(resolveProgressStageSelectValue(app.progress_stage))
                           setProgressPercentage(app.progress_percentage || 0)
                           setProgressNotes(app.progress_notes || '')
+                          const custom = app.custom_progress_stages
+                          setCustomStagesForItem(Array.isArray(custom) ? custom : null)
+                          setShowCustomStagesEditor(false)
                         }}
-                        className="text-xs text-primary-600 font-medium whitespace-nowrap"
+                        className="inline-flex items-center gap-2 py-3 px-4 rounded-xl border-2 border-amber-300 bg-amber-50 hover:bg-amber-100 text-amber-800 font-medium"
                         title="تحديث التقدم"
                       >
                         التقدم
@@ -727,8 +770,9 @@ export default function AdminDashboard() {
                     <button
                       type="button"
                       onClick={() => setShowDocsModalApp(app)}
-                      className="text-xs text-gray-600 font-medium whitespace-nowrap"
+                      className="inline-flex items-center gap-2 py-3 px-4 rounded-xl border-2 border-gold-300 bg-white hover:bg-gold-50 text-gold-800 font-medium"
                     >
+                      <FileText className="w-4 h-4" />
                       المستندات
                     </button>
                     <button
@@ -740,12 +784,15 @@ export default function AdminDashboard() {
                         const existing = requiredDocTypes.filter(d => d.active && msg.includes(d.label_ar)).map(d => d.label_ar)
                         setRequestDocsSelectedTypes(existing)
                       }}
-                      className="text-xs text-primary-600 font-medium whitespace-nowrap"
+                      className="inline-flex items-center gap-2 py-3 px-4 rounded-xl border-2 border-gold-400 bg-gold-100 hover:bg-gold-200 text-gold-900 font-medium"
                     >
+                      <FilePlus className="w-4 h-4" />
                       طلب مستندات
                     </button>
                   </div>
-                  <p className="text-xs text-gray-500">{new Date(app.created_at).toLocaleDateString('ar-TN')}</p>
+                  <p className="text-sm text-gold-600 pt-2 border-t border-gold-100">
+                    تاريخ التقديم: {new Date(app.created_at).toLocaleDateString('ar-TN')}
+                  </p>
                 </div>
               ))}
             </div>
@@ -754,30 +801,29 @@ export default function AdminDashboard() {
 
         {/* تبويب طلبات الشراء المباشر */}
         {activeTab === 'purchases' && (
-          <div className="card rounded-3xl">
+          <div className="rounded-2xl sm:rounded-3xl border-2 border-gold-200 bg-white p-4 sm:p-5 shadow-sm">
             <div className="flex flex-col sm:flex-row sm:justify-between sm:items-center gap-3 mb-4">
-              <h2 className="text-lg font-bold text-gray-900">طلبات الشراء المباشر</h2>
-              <span className="text-sm text-gray-500">{directPurchases.length} طلب</span>
+              <h2 className="text-lg font-bold text-gold-950">طلبات الشراء المباشر</h2>
+              <span className="text-sm text-gold-600">{directPurchases.length} طلب</span>
             </div>
 
-            {/* جدول على الشاشات الكبيرة، كروت على الموبايل */}
-            <div className="hidden md:block overflow-x-auto -mx-2">
+            <div className="hidden md:block overflow-x-auto -mx-2 rounded-xl border-2 border-gold-200 overflow-hidden">
               <table className="w-full min-w-[600px]">
                 <thead>
-                  <tr className="border-b border-gray-200">
-                    <th className="px-3 py-3 text-right text-xs font-semibold text-gray-600">المشروع</th>
-                    <th className="px-3 py-3 text-right text-xs font-semibold text-gray-600">المستخدم</th>
-                    <th className="px-3 py-3 text-right text-xs font-semibold text-gray-600">الحالة</th>
-                    <th className="px-3 py-3 text-right text-xs font-semibold text-gray-600">التاريخ</th>
-                    <th className="px-3 py-3 text-right text-xs font-semibold text-gray-600">الإجراءات</th>
+                  <tr className="border-b-2 border-gold-200 bg-gold-50/80">
+                    <th className="px-3 py-3 text-right text-xs font-semibold text-gold-800">المشروع</th>
+                    <th className="px-3 py-3 text-right text-xs font-semibold text-gold-800">المستخدم</th>
+                    <th className="px-3 py-3 text-right text-xs font-semibold text-gold-800">الحالة</th>
+                    <th className="px-3 py-3 text-right text-xs font-semibold text-gold-800">التاريخ</th>
+                    <th className="px-3 py-3 text-right text-xs font-semibold text-gold-800">الإجراءات</th>
                   </tr>
                 </thead>
-                <tbody className="divide-y divide-gray-100">
+                <tbody className="divide-y divide-gold-100 bg-white">
                   {directPurchases.map((purchase) => {
                     const profile = purchase.profiles || {}
                     const project = purchase.projects || {}
                     return (
-                      <tr key={purchase.id} className="hover:bg-gray-50/80">
+                      <tr key={purchase.id} className="hover:bg-gold-50/50 transition-colors">
                         <td className="px-3 py-3 text-sm">{project.name || '—'}</td>
                         <td className="px-3 py-3 text-sm">{profile.name || profile.email || '—'}</td>
                         <td className="px-3 py-3">
@@ -789,14 +835,14 @@ export default function AdminDashboard() {
                                 else { toast.success('تم تحديث الحالة'); loadData() }
                               })
                             }}
-                            className="input text-sm py-2 w-36"
+                            className="px-2.5 py-2 text-sm rounded-lg border-2 border-gold-200 bg-white text-gold-900 focus:ring-2 focus:ring-gold-400/50 focus:border-gold-500 outline-none w-36"
                           >
                             {Object.entries(PURCHASE_STATUS_LABELS).map(([val, label]) => (
                               <option key={val} value={val}>{label}</option>
                             ))}
                           </select>
                         </td>
-                        <td className="px-3 py-3 text-sm text-gray-500">
+                        <td className="px-3 py-3 text-sm text-gold-600">
                           {new Date(purchase.created_at).toLocaleDateString('ar-TN')}
                         </td>
                         <td className="px-3 py-3">
@@ -804,16 +850,18 @@ export default function AdminDashboard() {
                             <button
                               type="button"
                               onClick={() => setShowPurchaseDetail(purchase)}
-                              className="p-1.5 rounded-lg bg-gray-100 hover:bg-gray-200 text-gray-700"
+                              className="inline-flex items-center gap-1.5 py-2 px-3 rounded-xl border-2 border-gold-300 bg-gold-50 hover:bg-gold-100 text-gold-800 text-sm font-medium"
                               title="عرض التفاصيل"
                             >
                               <Eye className="w-4 h-4" />
+                              عرض
                             </button>
                             <button
                               type="button"
                               onClick={() => setShowPurchaseDocsModal(purchase)}
-                              className="text-xs text-gray-600 hover:text-gray-900 font-medium"
+                              className="inline-flex items-center gap-1.5 py-2 px-3 rounded-xl border-2 border-gold-300 bg-white hover:bg-gold-50 text-gold-800 text-sm font-medium"
                             >
+                              <FileText className="w-4 h-4" />
                               المستندات
                             </button>
                             <button
@@ -823,8 +871,9 @@ export default function AdminDashboard() {
                                 setRequestPurchaseDocsMessage(purchase.documents_note || '')
                                 setRequestDocsSelectedTypes([])
                               }}
-                              className="text-xs text-primary-600 hover:text-primary-700 font-medium"
+                              className="inline-flex items-center gap-1.5 py-2 px-3 rounded-xl border-2 border-gold-400 bg-gold-100 hover:bg-gold-200 text-gold-900 text-sm font-medium"
                             >
+                              <FilePlus className="w-4 h-4" />
                               طلب مستندات
                             </button>
                             {(purchase.status === 'approved' || purchase.status === 'in_progress') && (
@@ -832,11 +881,14 @@ export default function AdminDashboard() {
                                 type="button"
                                 onClick={() => {
                                   setShowProgressModal(purchase)
-                                  setProgressStage(purchase.progress_stage || '')
+                                  setProgressStage(resolveProgressStageSelectValue(purchase.progress_stage))
                                   setProgressPercentage(purchase.progress_percentage || 0)
                                   setProgressNotes(purchase.progress_notes || '')
+                                  const custom = (purchase as any).projects?.custom_progress_stages
+                                  setCustomStagesForItem(Array.isArray(custom) ? custom : null)
+                                  setShowCustomStagesEditor(false)
                                 }}
-                                className="text-xs text-primary-600 font-medium whitespace-nowrap"
+                                className="inline-flex items-center gap-1.5 py-2 px-3 rounded-xl border-2 border-amber-300 bg-amber-50 hover:bg-amber-100 text-amber-800 text-sm font-medium"
                                 title="تحديث التقدم"
                               >
                                 التقدم
@@ -851,19 +903,18 @@ export default function AdminDashboard() {
               </table>
             </div>
 
-            {/* كروت للموبايل */}
-            <div className="md:hidden space-y-3">
+            <div className="md:hidden space-y-5">
               {directPurchases.map((purchase) => {
                 const profile = purchase.profiles || {}
                 const project = purchase.projects || {}
                 return (
-                  <div key={purchase.id} className="rounded-2xl border border-gray-100 bg-gray-50/50 p-4 space-y-2">
-                    <div className="flex justify-between items-start">
+                  <div key={purchase.id} className="rounded-2xl border-2 border-gold-200 bg-white p-5 sm:p-6 shadow-sm">
+                    <div className="flex justify-between items-start gap-3 mb-4">
                       <div>
-                        <p className="font-semibold text-gray-900">{project.name || '—'}</p>
-                        <p className="text-sm text-gray-600">{profile.name || profile.email || '—'}</p>
+                        <p className="text-lg font-bold text-gold-900">{project.name || '—'}</p>
+                        <p className="text-sm text-gold-600 mt-0.5">{profile.name || profile.email || '—'}</p>
                       </div>
-                      <span className={`px-2 py-1 rounded-lg text-xs font-medium ${
+                      <span className={`shrink-0 px-3 py-1.5 rounded-xl text-sm font-medium ${
                         purchase.status === 'approved' ? 'bg-green-100 text-green-800' :
                         purchase.status === 'rejected' ? 'bg-red-100 text-red-800' :
                         'bg-gray-100 text-gray-700'
@@ -871,15 +922,8 @@ export default function AdminDashboard() {
                         {PURCHASE_STATUS_LABELS[purchase.status] || purchase.status}
                       </span>
                     </div>
-                    <div className="flex flex-wrap items-center gap-2 pt-2">
-                      <button
-                        type="button"
-                        onClick={() => setShowPurchaseDetail(purchase)}
-                        className="p-2 rounded-lg bg-gray-100 text-gray-700 shrink-0"
-                        title="عرض التفاصيل"
-                      >
-                        <Eye className="w-4 h-4" />
-                      </button>
+                    <div className="mb-4">
+                      <span className="text-gold-500 text-sm font-medium block mb-1">الحالة</span>
                       <select
                         value={purchase.status}
                         onChange={(e) => {
@@ -888,17 +932,29 @@ export default function AdminDashboard() {
                             else { toast.success('تم تحديث الحالة'); loadData() }
                           })
                         }}
-                        className="input text-sm py-2 flex-1 min-w-0"
+                        className="w-full px-4 py-3 text-base rounded-xl border-2 border-gold-200 bg-white text-gold-900 focus:ring-2 focus:ring-gold-400/50 focus:border-gold-500 outline-none"
                       >
                         {Object.entries(PURCHASE_STATUS_LABELS).map(([val, label]) => (
                           <option key={val} value={val}>{label}</option>
                         ))}
                       </select>
+                    </div>
+                    <div className="flex flex-wrap gap-2 mb-4">
+                      <button
+                        type="button"
+                        onClick={() => setShowPurchaseDetail(purchase)}
+                        className="inline-flex items-center gap-2 py-3 px-4 rounded-xl border-2 border-gold-300 bg-gold-50 hover:bg-gold-100 text-gold-800 font-medium"
+                        title="عرض التفاصيل"
+                      >
+                        <Eye className="w-4 h-4" />
+                        عرض التفاصيل
+                      </button>
                       <button
                         type="button"
                         onClick={() => setShowPurchaseDocsModal(purchase)}
-                        className="text-xs text-gray-600 font-medium whitespace-nowrap"
+                        className="inline-flex items-center gap-2 py-3 px-4 rounded-xl border-2 border-gold-300 bg-white hover:bg-gold-50 text-gold-800 font-medium"
                       >
+                        <FileText className="w-4 h-4" />
                         المستندات
                       </button>
                       <button
@@ -908,8 +964,9 @@ export default function AdminDashboard() {
                           setRequestPurchaseDocsMessage(purchase.documents_note || '')
                           setRequestDocsSelectedTypes([])
                         }}
-                        className="text-xs text-primary-600 font-medium whitespace-nowrap"
+                        className="inline-flex items-center gap-2 py-3 px-4 rounded-xl border-2 border-gold-400 bg-gold-100 hover:bg-gold-200 text-gold-900 font-medium"
                       >
+                        <FilePlus className="w-4 h-4" />
                         طلب مستندات
                       </button>
                       {(purchase.status === 'approved' || purchase.status === 'in_progress') && (
@@ -917,18 +974,23 @@ export default function AdminDashboard() {
                           type="button"
                           onClick={() => {
                             setShowProgressModal(purchase)
-                            setProgressStage(purchase.progress_stage || '')
+                            setProgressStage(resolveProgressStageSelectValue(purchase.progress_stage))
                             setProgressPercentage(purchase.progress_percentage || 0)
                             setProgressNotes(purchase.progress_notes || '')
+                            const custom = (purchase as any).projects?.custom_progress_stages
+                            setCustomStagesForItem(Array.isArray(custom) ? custom : null)
+                            setShowCustomStagesEditor(false)
                           }}
-                          className="text-xs text-primary-600 font-medium whitespace-nowrap"
+                          className="inline-flex items-center gap-2 py-3 px-4 rounded-xl border-2 border-amber-300 bg-amber-50 hover:bg-amber-100 text-amber-800 font-medium"
                           title="تحديث التقدم"
                         >
                           التقدم
                         </button>
                       )}
                     </div>
-                    <p className="text-xs text-gray-500">{new Date(purchase.created_at).toLocaleDateString('ar-TN')}</p>
+                    <p className="text-sm text-gold-600 pt-2 border-t border-gold-100">
+                      التاريخ: {new Date(purchase.created_at).toLocaleDateString('ar-TN')}
+                    </p>
                   </div>
                 )
               })}
@@ -939,12 +1001,12 @@ export default function AdminDashboard() {
         {/* تبويب المشاريع */}
         {activeTab === 'projects' && (
           <div className="space-y-6">
-            <div className="card rounded-3xl">
+            <div className="rounded-2xl sm:rounded-3xl border-2 border-gold-200 bg-white p-4 sm:p-5 shadow-sm">
               <div className="flex flex-col sm:flex-row sm:justify-between sm:items-center gap-4 mb-5">
-                <h2 className="text-lg font-bold text-gray-900">المشاريع</h2>
+                <h2 className="text-lg font-bold text-gold-950">المشاريع</h2>
                 <button
                   onClick={() => { setEditingProject(null); setShowProjectForm(true); }}
-                  className="btn-primary py-3 px-5 rounded-2xl flex items-center justify-center gap-2 w-full sm:w-auto"
+                  className="py-3 px-5 rounded-xl font-semibold bg-gradient-to-b from-gold-400 to-gold-600 text-white flex items-center justify-center gap-2 w-full sm:w-auto shadow-md hover:from-gold-500 hover:to-gold-700 hover:shadow-lg transition-all"
                 >
                   <Plus className="w-4 h-4" />
                   إضافة مشروع
@@ -955,35 +1017,35 @@ export default function AdminDashboard() {
                 {projects.map((project) => {
                   const timing = getProjectTiming(project)
                   return (
-                    <div key={project.id} className="rounded-2xl border border-gray-100 bg-white p-5 shadow-card hover:shadow-soft transition-shadow">
-                      <h3 className="text-base font-semibold text-gray-900 mb-2">{project.name}</h3>
-                      <div className="space-y-1.5 text-sm text-gray-600 mb-4">
+                    <div key={project.id} className="rounded-2xl border-2 border-gold-200 bg-white p-5 shadow-sm hover:shadow-md hover:border-gold-300 transition-all">
+                      <h3 className="text-base font-semibold text-gold-900 mb-2">{project.name}</h3>
+                      <div className="space-y-1.5 text-sm text-gold-700 mb-4">
                         <div>{project.governorate}، {project.district}</div>
                         <div>{project.number_of_units} وحدة</div>
                         {project.expected_price && (
                           <div>{Number(project.expected_price).toLocaleString('ar-TN')} د.ت</div>
                         )}
                         {timing.label && (
-                          <div className={`flex items-center gap-1.5 text-xs font-medium ${timing.isFinished ? 'text-gray-500' : timing.isNotStarted ? 'text-primary-600' : 'text-amber-700'}`}>
+                          <div className={`flex items-center gap-1.5 text-xs font-medium ${timing.isFinished ? 'text-gold-500' : timing.isNotStarted ? 'text-gold-600' : 'text-amber-700'}`}>
                             {timing.isFinished ? <CalendarCheck className="w-3.5 h-3.5" /> : <Calendar className="w-3.5 h-3.5" />}
                             {timing.label}
                           </div>
                         )}
                         {project.start_date && (
-                          <div className="text-xs text-gray-500">
+                          <div className="text-xs text-gold-600">
                             من {new Date(project.start_date).toLocaleDateString('ar-TN')}
                             {project.delivery_date && ` → ${new Date(project.delivery_date).toLocaleDateString('ar-TN')}`}
                           </div>
                         )}
                         {project.completion_percentage > 0 && (
                           <div className="mt-2">
-                            <div className="flex justify-between text-xs mb-1">
+                            <div className="flex justify-between text-xs mb-1 text-gold-700">
                               <span>الإنجاز</span>
                               <span>{project.completion_percentage}%</span>
                             </div>
-                            <div className="w-full bg-gray-200 rounded-full h-2">
+                            <div className="w-full bg-gold-200 rounded-full h-2">
                               <div
-                                className="bg-primary-500 h-2 rounded-full transition-all"
+                                className="bg-gold-600 h-2 rounded-full transition-all"
                                 style={{ width: `${project.completion_percentage}%` }}
                               />
                             </div>
@@ -992,9 +1054,9 @@ export default function AdminDashboard() {
                       </div>
                       <div className="flex flex-wrap items-center gap-2">
                         <span className={`px-2 py-1 rounded-lg text-xs font-medium ${
-                          timing.isFinished ? 'bg-gray-100 text-gray-700' :
+                          timing.isFinished ? 'bg-gold-100 text-gold-700' :
                           project.status === 'ready' ? 'bg-green-100 text-green-800' :
-                          project.status === 'study' ? 'bg-primary-100 text-primary-800' :
+                          project.status === 'study' ? 'bg-gold-100 text-gold-800' :
                           'bg-amber-100 text-amber-800'
                         }`}>
                           {timing.isFinished ? 'منتهي' : (PROJECT_STATUS_LABELS[project.status] || project.status)}
@@ -1003,7 +1065,7 @@ export default function AdminDashboard() {
                           <button
                             type="button"
                             onClick={() => { setExtendProject(project); setExtendEndDate(project.delivery_date || '') }}
-                            className="text-xs text-primary-600 hover:text-primary-700 font-medium flex items-center gap-1"
+                            className="text-xs text-gold-600 hover:text-gold-700 font-medium flex items-center gap-1"
                             title="تمديد المدة"
                           >
                             <Calendar className="w-3.5 h-3.5" />
@@ -1012,7 +1074,7 @@ export default function AdminDashboard() {
                         )}
                         <button
                           onClick={() => { setEditingProject(project); setShowProjectForm(true); }}
-                          className="text-primary-600 hover:text-primary-700 text-sm font-medium flex items-center gap-1"
+                          className="text-gold-600 hover:text-gold-700 text-sm font-medium flex items-center gap-1"
                         >
                           <Edit className="w-4 h-4" />
                           تعديل
@@ -1025,8 +1087,8 @@ export default function AdminDashboard() {
             </div>
 
             {projects.length > 0 && (
-              <div className="card rounded-3xl p-5">
-                <h3 className="text-base font-semibold text-gray-900 mb-3">خريطة المشاريع</h3>
+              <div className="rounded-2xl sm:rounded-3xl border-2 border-gold-200 bg-white p-5 shadow-sm">
+                <h3 className="text-base font-semibold text-gold-950 mb-3">خريطة المشاريع</h3>
                 <div className="h-64 sm:h-80 rounded-2xl overflow-hidden">
                   <MapView projects={projects} />
                 </div>
@@ -1037,16 +1099,16 @@ export default function AdminDashboard() {
 
         {/* تبويب المستندات المطلوبة */}
         {activeTab === 'documents' && (
-          <div className="card rounded-3xl p-5">
-            <h2 className="text-lg font-bold text-gray-900 mb-2">إدارة المستندات المطلوبة</h2>
-            <p className="text-sm text-gray-600 mb-4">هذه القائمة تظهر للمتقدمين في صفحة تفاصيل الطلب. يمكنك إضافة أو إخفاء عناصر.</p>
+          <div className="rounded-2xl sm:rounded-3xl border-2 border-gold-200 bg-white p-5 shadow-sm">
+            <h2 className="text-lg font-bold text-gold-950 mb-2">إدارة المستندات المطلوبة</h2>
+            <p className="text-sm text-gold-700 mb-4">هذه القائمة تظهر للمتقدمين في صفحة تفاصيل الطلب. يمكنك إضافة أو إخفاء عناصر.</p>
             <div className="flex flex-wrap gap-2 mb-4">
               <input
                 type="text"
                 value={newDocLabel}
                 onChange={(e) => setNewDocLabel(e.target.value)}
                 placeholder="اسم المستند (مثال: شهادة الضرائب)"
-                className="form-input flex-1 min-w-[200px] py-2.5"
+                className="flex-1 min-w-[200px] py-2.5 px-4 rounded-xl border-2 border-gold-200 bg-white text-gold-900 placeholder:text-gold-400 focus:ring-2 focus:ring-gold-400/50 focus:border-gold-500 outline-none"
                 onKeyDown={(e) => {
                   if (e.key === 'Enter') {
                     e.preventDefault()
@@ -1078,15 +1140,15 @@ export default function AdminDashboard() {
                     loadRequiredDocTypes()
                   })
                 }}
-                className="btn-primary py-2.5 px-4 disabled:opacity-50"
+                className="py-2.5 px-4 rounded-xl font-medium bg-gradient-to-b from-gold-400 to-gold-600 text-white hover:from-gold-500 hover:to-gold-700 disabled:opacity-50 shadow-sm"
               >
                 {docsLoading ? 'جاري...' : 'إضافة'}
               </button>
             </div>
             <ul className="space-y-2">
               {requiredDocTypes.map((d) => (
-                <li key={d.id} className="flex items-center justify-between gap-3 py-2 px-3 rounded-xl bg-gray-50 border border-gray-100">
-                  <span className={`text-sm font-medium ${d.active ? 'text-gray-900' : 'text-gray-400 line-through'}`}>{d.label_ar}</span>
+                <li key={d.id} className="flex items-center justify-between gap-3 py-2 px-3 rounded-xl bg-gold-50/80 border-2 border-gold-200">
+                  <span className={`text-sm font-medium ${d.active ? 'text-gold-900' : 'text-gold-400 line-through'}`}>{d.label_ar}</span>
                   <div className="flex items-center gap-2 shrink-0">
                     <button
                       type="button"
@@ -1105,7 +1167,7 @@ export default function AdminDashboard() {
                           loadRequiredDocTypes()
                         })
                       }}
-                      className="text-xs py-1.5 px-2.5 rounded-lg bg-gray-200 hover:bg-gray-300 text-gray-700 disabled:opacity-50"
+                      className="text-xs py-1.5 px-2.5 rounded-lg bg-gold-200 hover:bg-gold-300 text-gold-800 disabled:opacity-50"
                     >
                       {d.active ? 'إخفاء' : 'تفعيل'}
                     </button>
@@ -1136,7 +1198,111 @@ export default function AdminDashboard() {
               ))}
             </ul>
             {requiredDocTypes.length === 0 && (
-              <p className="text-sm text-gray-500 py-4">لا توجد عناصر. نفّذ سكريبت required_document_types.sql في Supabase ثم حدّث الصفحة.</p>
+              <p className="text-sm text-gold-600 py-4">لا توجد عناصر. نفّذ سكريبت required_document_types.sql في Supabase ثم حدّث الصفحة.</p>
+            )}
+          </div>
+        )}
+
+        {/* تبويب مراحل التقدم — إدارة المراحل الافتراضية والمخصصة */}
+        {activeTab === 'stages' && (
+          <div className="rounded-2xl sm:rounded-3xl border-2 border-gold-200 bg-white p-4 sm:p-5 shadow-sm">
+            <h2 className="text-base sm:text-lg font-bold text-gold-950 mb-1">مراحل التقدم</h2>
+            <p className="text-sm text-gold-600 mb-4">المراحل التي تظهر عند «تحديث التقدم» للطلبات وطلبات الشراء. يمكنك تعديل اسم أي مرحلة (بما فيها الافتراضية). المراحل الافتراضية لا تُحذف؛ المراحل المخصصة يمكن حذفها.</p>
+            <div className="flex flex-wrap gap-2 mb-4">
+              <input
+                type="text"
+                value={newProgressStageLabel}
+                onChange={(e) => setNewProgressStageLabel(e.target.value)}
+                placeholder="اسم المرحلة المخصصة (مثال: تسليم المفاتيح)"
+                className="flex-1 min-w-[200px] py-2.5 px-4 rounded-xl border-2 border-gold-200 bg-white text-gold-900 placeholder:text-gold-400 focus:ring-2 focus:ring-gold-400/50 focus:border-gold-500 outline-none"
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter') {
+                    e.preventDefault()
+                    document.getElementById('stage-add-btn')?.click()
+                  }
+                }}
+              />
+              <button
+                id="stage-add-btn"
+                type="button"
+                onClick={async () => {
+                  const label = newProgressStageLabel.trim()
+                  if (!label) return
+                  const maxOrder = progressStages.length ? Math.max(...progressStages.map(s => s.sort_order)) : 0
+                  const { error } = await supabase.from('progress_stages').insert({ label_ar: label, sort_order: maxOrder + 1, is_system: false })
+                  if (error) toast.error('فشل الإضافة')
+                  else { toast.success('تمت إضافة المرحلة'); setNewProgressStageLabel(''); loadProgressStages() }
+                }}
+                disabled={!newProgressStageLabel.trim()}
+                className="py-2.5 px-4 rounded-xl font-medium bg-gradient-to-b from-gold-400 to-gold-600 text-white hover:from-gold-500 hover:to-gold-700 disabled:opacity-50 shadow-sm"
+              >
+                إضافة مرحلة مخصصة
+              </button>
+            </div>
+            <ul className="space-y-2">
+              {progressStages.map((s) => (
+                <li key={s.id} className="flex items-center justify-between gap-3 py-2.5 px-3 rounded-xl bg-gold-50/80 border-2 border-gold-200">
+                  {editingProgressStageId === s.id ? (
+                    <>
+                      <input
+                        type="text"
+                        value={editingProgressStageLabel}
+                        onChange={(e) => setEditingProgressStageLabel(e.target.value)}
+                        className="flex-1 min-w-0 py-1.5 px-3 rounded-lg border border-gold-300 text-sm"
+                        placeholder="اسم المرحلة"
+                      />
+                      <div className="flex items-center gap-2 shrink-0">
+                        <button
+                          type="button"
+                          onClick={async () => {
+                            const label = editingProgressStageLabel.trim()
+                            if (!label) return
+                            const { error } = await supabase.from('progress_stages').update({ label_ar: label }).eq('id', s.id)
+                            if (error) toast.error('فشل التعديل')
+                            else { toast.success('تم التعديل'); setEditingProgressStageId(null); loadProgressStages() }
+                          }}
+                          disabled={!editingProgressStageLabel.trim()}
+                          className="text-xs py-1.5 px-2.5 rounded-lg bg-gold-200 hover:bg-gold-300 text-gold-800 disabled:opacity-50"
+                        >
+                          حفظ
+                        </button>
+                        <button type="button" onClick={() => setEditingProgressStageId(null)} className="text-xs py-1.5 px-2.5 rounded-lg bg-gray-200 text-gray-600">إلغاء</button>
+                      </div>
+                    </>
+                  ) : (
+                    <>
+                      <span className="text-sm font-medium text-gold-900">{s.label_ar}</span>
+                      <div className="flex items-center gap-2 shrink-0">
+                        {s.is_system && <span className="text-xs text-gold-500">افتراضي</span>}
+                        <button
+                          type="button"
+                          onClick={() => { setEditingProgressStageId(s.id); setEditingProgressStageLabel(s.label_ar); }}
+                          className="text-xs py-1.5 px-2.5 rounded-lg bg-gold-200 hover:bg-gold-300 text-gold-800"
+                        >
+                          تعديل
+                        </button>
+                        {!s.is_system && (
+                          <button
+                            type="button"
+                            onClick={async () => {
+                              if (!confirm('حذف هذه المرحلة من القائمة؟')) return
+                              const { error } = await supabase.from('progress_stages').delete().eq('id', s.id)
+                              if (error) toast.error('فشل الحذف')
+                              else { toast.success('تم الحذف'); loadProgressStages() }
+                            }}
+                            className="text-xs py-1.5 px-2.5 rounded-lg bg-red-100 hover:bg-red-200 text-red-700"
+                          >
+                            حذف
+                          </button>
+                        )}
+                      </div>
+                    </>
+                  )}
+                </li>
+              ))}
+            </ul>
+            {progressStages.length === 0 && (
+              <p className="text-sm text-gold-600 py-4">لا توجد مراحل. نفّذ سكريبت add_progress_stages_table.sql في Supabase ثم حدّث الصفحة.</p>
             )}
           </div>
         )}
@@ -1145,44 +1311,42 @@ export default function AdminDashboard() {
         {activeTab === 'reports' && (
           <div className="space-y-6">
             <div className="flex flex-col sm:flex-row sm:justify-between sm:items-center gap-3">
-              <h2 className="text-xl font-bold text-gray-900">التقارير والإحصائيات</h2>
-              <button onClick={exportReportsCsv} className="btn-primary py-2.5 px-4 rounded-2xl flex items-center justify-center gap-2 w-full sm:w-auto text-sm">
+              <h2 className="text-xl font-bold text-gold-950">التقارير والإحصائيات</h2>
+              <button onClick={exportReportsCsv} className="py-2.5 px-4 rounded-xl font-semibold bg-gradient-to-b from-gold-400 to-gold-600 text-white flex items-center justify-center gap-2 w-full sm:w-auto text-sm shadow-md hover:from-gold-500 hover:to-gold-700 hover:shadow-lg transition-all">
                 <Download className="w-4 h-4" />
                 تصدير Excel (CSV)
               </button>
             </div>
 
-            {/* لوحة المؤشرات */}
             <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
-              <div className="card rounded-2xl p-4 text-center">
-                <p className="text-2xl font-bold text-gray-900">{stats.totalApplications}</p>
-                <p className="text-xs text-gray-500 mt-0.5">إجمالي الطلبات</p>
+              <div className="rounded-2xl border-2 border-gold-200 bg-white p-4 text-center shadow-sm">
+                <p className="text-2xl font-bold text-gold-900">{stats.totalApplications}</p>
+                <p className="text-xs text-gold-600 mt-0.5">إجمالي الطلبات</p>
               </div>
-              <div className="card rounded-2xl p-4 text-center">
-                <p className="text-2xl font-bold text-primary-600">{applications.filter(a => a.status === 'in_progress' || a.status === 'pending').length}</p>
-                <p className="text-xs text-gray-500 mt-0.5">قيد المعالجة</p>
+              <div className="rounded-2xl border-2 border-gold-200 bg-white p-4 text-center shadow-sm">
+                <p className="text-2xl font-bold text-gold-600">{applications.filter(a => a.status === 'in_progress' || a.status === 'pending').length}</p>
+                <p className="text-xs text-gold-600 mt-0.5">قيد المعالجة</p>
               </div>
-              <div className="card rounded-2xl p-4 text-center">
+              <div className="rounded-2xl border-2 border-gold-200 bg-white p-4 text-center shadow-sm">
                 <p className="text-2xl font-bold text-amber-600">{statusStats.documents_requested || 0}</p>
-                <p className="text-xs text-gray-500 mt-0.5">طلب مستندات</p>
+                <p className="text-xs text-gold-600 mt-0.5">طلب مستندات</p>
               </div>
-              <div className="card rounded-2xl p-4 text-center">
+              <div className="rounded-2xl border-2 border-gold-200 bg-white p-4 text-center shadow-sm">
                 <p className="text-2xl font-bold text-green-600">{statusStats.approved || 0}</p>
-                <p className="text-xs text-gray-500 mt-0.5">مقبول</p>
+                <p className="text-xs text-gold-600 mt-0.5">مقبول</p>
               </div>
-              <div className="card rounded-2xl p-4 text-center">
+              <div className="rounded-2xl border-2 border-gold-200 bg-white p-4 text-center shadow-sm">
                 <p className="text-2xl font-bold text-red-600">{statusStats.rejected || 0}</p>
-                <p className="text-xs text-gray-500 mt-0.5">مرفوض</p>
+                <p className="text-xs text-gold-600 mt-0.5">مرفوض</p>
               </div>
-              <div className="card rounded-2xl p-4 text-center">
-                <p className="text-2xl font-bold text-gray-900">{avgScore}</p>
-                <p className="text-xs text-gray-500 mt-0.5">متوسط النقاط</p>
+              <div className="rounded-2xl border-2 border-gold-200 bg-white p-4 text-center shadow-sm">
+                <p className="text-2xl font-bold text-gold-900">{avgScore}</p>
+                <p className="text-xs text-gold-600 mt-0.5">متوسط النقاط</p>
               </div>
             </div>
 
-            {/* التوزيع حسب الحالة */}
-            <div className="card rounded-3xl p-5">
-              <h3 className="text-base font-semibold text-gray-900 mb-4">توزيع الطلبات حسب الحالة</h3>
+            <div className="rounded-2xl sm:rounded-3xl border-2 border-gold-200 bg-white p-5 shadow-sm">
+              <h3 className="text-base font-semibold text-gold-950 mb-4">توزيع الطلبات حسب الحالة</h3>
               <div className="space-y-3">
                 {Object.entries(APP_STATUS_LABELS).map(([val, label]) => {
                   const count = statusStats[val] || 0
@@ -1190,11 +1354,11 @@ export default function AdminDashboard() {
                   return (
                     <div key={val}>
                       <div className="flex justify-between mb-1 text-sm">
-                        <span className="font-medium text-gray-800">{label}</span>
-                        <span className="text-gray-600">{count} ({pct}%)</span>
+                        <span className="font-medium text-gold-800">{label}</span>
+                        <span className="text-gold-600">{count} ({pct}%)</span>
                       </div>
-                      <div className="w-full bg-gray-200 rounded-full h-2.5">
-                        <div className="bg-primary-500 h-2.5 rounded-full transition-all" style={{ width: `${pct}%` }} />
+                      <div className="w-full bg-gold-200 rounded-full h-2.5">
+                        <div className="bg-gold-600 h-2.5 rounded-full transition-all" style={{ width: `${pct}%` }} />
                       </div>
                     </div>
                   )
@@ -1203,14 +1367,14 @@ export default function AdminDashboard() {
             </div>
 
             {/* الطلبات خلال 12 شهرًا */}
-            <div className="card rounded-3xl p-5">
+            <div className="rounded-2xl sm:rounded-3xl border-2 border-gold-200 bg-white p-5 shadow-sm">
               <div className="flex flex-wrap items-baseline justify-between gap-2 mb-4">
-                <h3 className="text-base font-semibold text-gray-900">الطلبات خلال آخر 12 شهراً</h3>
-                <span className="text-sm text-gray-500">
-                  المجموع: <span className="font-semibold text-gray-800">{monthlyStats.reduce((a, m) => a + m.count, 0)}</span> طلب
+                <h3 className="text-base font-semibold text-gold-950">الطلبات خلال آخر 12 شهراً</h3>
+                <span className="text-sm text-gold-600">
+                  المجموع: <span className="font-semibold text-gold-800">{monthlyStats.reduce((a, m) => a + m.count, 0)}</span> طلب
                 </span>
               </div>
-              <div className="rounded-xl bg-gray-50/80 border border-gray-100 p-4">
+              <div className="rounded-xl bg-gold-50/80 border-2 border-gold-200 p-4">
                 <div className="flex items-end justify-between gap-1 sm:gap-2 h-32">
                   {monthlyStats.map((m) => {
                     const max = Math.max(...monthlyStats.map(x => x.count), 1)
@@ -1218,15 +1382,15 @@ export default function AdminDashboard() {
                     return (
                       <div key={m.label} className="flex-1 min-w-0 flex flex-col items-center justify-end gap-1 h-full" title={`${m.label}: ${m.count}`}>
                         {m.count > 0 && (
-                          <span className="text-[10px] font-semibold text-gray-700 tabular-nums leading-none">{m.count}</span>
+                          <span className="text-[10px] font-semibold text-gold-800 tabular-nums leading-none">{m.count}</span>
                         )}
                         <div className="w-full flex-1 flex flex-col justify-end min-h-0" style={{ minWidth: '6px' }}>
                           <div
-                            className="w-full rounded-t-md bg-primary-500/90 hover:bg-primary-600 transition-colors"
+                            className="w-full rounded-t-md bg-gold-500/90 hover:bg-gold-600 transition-colors"
                             style={{ height: `${barHeightPct}%` }}
                           />
                         </div>
-                        <span className="text-[10px] text-gray-500 truncate w-full text-center leading-tight">{m.label}</span>
+                        <span className="text-[10px] text-gold-600 truncate w-full text-center leading-tight">{m.label}</span>
                       </div>
                     )
                   })}
@@ -1235,27 +1399,25 @@ export default function AdminDashboard() {
             </div>
 
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-              {/* التوزيع حسب الولاية */}
-              <div className="card rounded-3xl p-5">
-                <h3 className="text-base font-semibold text-gray-900 mb-4">التوزيع حسب الولاية</h3>
+              <div className="rounded-2xl sm:rounded-3xl border-2 border-gold-200 bg-white p-5 shadow-sm">
+                <h3 className="text-base font-semibold text-gold-950 mb-4">التوزيع حسب الولاية</h3>
                 <div className="space-y-2 max-h-64 overflow-y-auto">
                   {Object.entries(governorateStats)
                     .sort(([, a], [, b]) => (b as number) - (a as number))
                     .map(([gov, count]) => (
                       <div key={gov} className="flex justify-between items-center text-sm">
-                        <span className="font-medium text-gray-800">{gov}</span>
-                        <span className="text-gray-600">{count} ({stats.totalApplications ? ((count as number) / stats.totalApplications * 100).toFixed(1) : 0}%)</span>
+                        <span className="font-medium text-gold-800">{gov}</span>
+                        <span className="text-gold-600">{count} ({stats.totalApplications ? ((count as number) / stats.totalApplications * 100).toFixed(1) : 0}%)</span>
                       </div>
                     ))}
                 </div>
               </div>
 
-              {/* القدرة الشرائية + متوسط الدخل */}
-              <div className="card rounded-3xl p-5">
-                <h3 className="text-base font-semibold text-gray-900 mb-4">القدرة الشرائية ومتوسط الدخل</h3>
-                <div className="mb-4 p-3 rounded-xl bg-gray-50">
-                  <p className="text-sm text-gray-600">متوسط الدخل الشهري (د.ت)</p>
-                  <p className="text-xl font-bold text-gray-900">{avgIncome}</p>
+              <div className="rounded-2xl sm:rounded-3xl border-2 border-gold-200 bg-white p-5 shadow-sm">
+                <h3 className="text-base font-semibold text-gold-950 mb-4">القدرة الشرائية ومتوسط الدخل</h3>
+                <div className="mb-4 p-3 rounded-xl bg-gold-50/80">
+                  <p className="text-sm text-gold-600">متوسط الدخل الشهري (د.ت)</p>
+                  <p className="text-xl font-bold text-gold-900">{avgIncome}</p>
                 </div>
                 <div className="space-y-3">
                   {[
@@ -1276,24 +1438,22 @@ export default function AdminDashboard() {
                 </div>
               </div>
 
-              {/* نوع السكن المطلوب */}
-              <div className="card rounded-3xl p-5">
-                <h3 className="text-base font-semibold text-gray-900 mb-4">نوع السكن المطلوب</h3>
+              <div className="rounded-2xl sm:rounded-3xl border-2 border-gold-200 bg-white p-5 shadow-sm">
+                <h3 className="text-base font-semibold text-gold-950 mb-4">نوع السكن المطلوب</h3>
                 <div className="space-y-2">
                   {Object.entries(housingTypeStats)
                     .sort(([, a], [, b]) => (b as number) - (a as number))
                     .map(([type, count]) => (
                       <div key={type} className="flex justify-between text-sm">
-                        <span className="text-gray-800">{type}</span>
-                        <span className="font-medium text-gray-600">{count} ({stats.totalApplications ? ((count / stats.totalApplications) * 100).toFixed(1) : 0}%)</span>
+                        <span className="text-gold-800">{type}</span>
+                        <span className="font-medium text-gold-600">{count} ({stats.totalApplications ? ((count / stats.totalApplications) * 100).toFixed(1) : 0}%)</span>
                       </div>
                     ))}
                 </div>
               </div>
 
-              {/* المساحة المطلوبة */}
-              <div className="card rounded-3xl p-5">
-                <h3 className="text-base font-semibold text-gray-900 mb-4">المساحة المطلوبة (م²)</h3>
+              <div className="rounded-2xl sm:rounded-3xl border-2 border-gold-200 bg-white p-5 shadow-sm">
+                <h3 className="text-base font-semibold text-gold-950 mb-4">المساحة المطلوبة (م²)</h3>
                 <div className="space-y-2">
                   {Object.entries(areaStats)
                     .filter(([k]) => k !== 'غير محدد')
@@ -1301,47 +1461,44 @@ export default function AdminDashboard() {
                     .slice(0, 8)
                     .map(([area, count]) => (
                       <div key={area} className="flex justify-between text-sm">
-                        <span className="text-gray-800">{area}</span>
-                        <span className="font-medium text-gray-600">{count}</span>
+                        <span className="text-gold-800">{area}</span>
+                        <span className="font-medium text-gold-600">{count}</span>
                       </div>
                     ))}
                   {Object.keys(areaStats).filter(k => k !== 'غير محدد').length === 0 && (
-                    <p className="text-sm text-gray-500">لا توجد بيانات</p>
+                    <p className="text-sm text-gold-600">لا توجد بيانات</p>
                   )}
                 </div>
               </div>
 
-              {/* الحالة الاجتماعية */}
-              <div className="card rounded-3xl p-5">
-                <h3 className="text-base font-semibold text-gray-900 mb-4">الحالة الاجتماعية</h3>
+              <div className="rounded-2xl sm:rounded-3xl border-2 border-gold-200 bg-white p-5 shadow-sm">
+                <h3 className="text-base font-semibold text-gold-950 mb-4">الحالة الاجتماعية</h3>
                 <div className="space-y-2">
                   {Object.entries(maritalStats).map(([k, count]) => (
                     <div key={k} className="flex justify-between text-sm">
-                      <span className="text-gray-800">{k}</span>
-                      <span className="font-medium text-gray-600">{count}</span>
+                      <span className="text-gold-800">{k}</span>
+                      <span className="font-medium text-gold-600">{count}</span>
                     </div>
                   ))}
                 </div>
               </div>
 
-              {/* الوضعية المهنية */}
-              <div className="card rounded-3xl p-5">
-                <h3 className="text-base font-semibold text-gray-900 mb-4">الوضعية المهنية</h3>
+              <div className="rounded-2xl sm:rounded-3xl border-2 border-gold-200 bg-white p-5 shadow-sm">
+                <h3 className="text-base font-semibold text-gold-950 mb-4">الوضعية المهنية</h3>
                 <div className="space-y-2 max-h-48 overflow-y-auto">
                   {Object.entries(employmentStats)
                     .sort(([, a], [, b]) => (b as number) - (a as number))
                     .map(([k, count]) => (
                       <div key={k} className="flex justify-between text-sm">
-                        <span className="text-gray-800">{k}</span>
-                        <span className="font-medium text-gray-600">{count}</span>
+                        <span className="text-gold-800">{k}</span>
+                        <span className="font-medium text-gold-600">{count}</span>
                       </div>
                     ))}
                 </div>
               </div>
 
-              {/* طريقة الدفع ومدة التقسيط */}
-              <div className="card rounded-3xl p-5">
-                <h3 className="text-base font-semibold text-gray-900 mb-4">طريقة الدفع</h3>
+              <div className="rounded-2xl sm:rounded-3xl border-2 border-gold-200 bg-white p-5 shadow-sm">
+                <h3 className="text-base font-semibold text-gold-950 mb-4">طريقة الدفع</h3>
                 <div className="space-y-2 mb-4">
                   {Object.entries(paymentTypeStats).map(([k, count]) => (
                     <div key={k} className="flex justify-between text-sm">
@@ -1350,7 +1507,7 @@ export default function AdminDashboard() {
                     </div>
                   ))}
                 </div>
-                <h3 className="text-base font-semibold text-gray-900 mb-2">مدة التقسيط</h3>
+                <h3 className="text-base font-semibold text-gold-950 mb-2">مدة التقسيط</h3>
                 <div className="space-y-2">
                   {Object.entries(installmentStats).map(([k, count]) => (
                     <div key={k} className="flex justify-between text-sm">
@@ -1362,8 +1519,8 @@ export default function AdminDashboard() {
               </div>
 
               {/* توزيع الأولويات */}
-              <div className="card rounded-3xl p-5">
-                <h3 className="text-base font-semibold text-gray-900 mb-4">توزيع الأولويات</h3>
+              <div className="rounded-2xl sm:rounded-3xl border-2 border-gold-200 bg-white p-5 shadow-sm">
+                <h3 className="text-base font-semibold text-gold-950 mb-4">توزيع الأولويات</h3>
                 <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
                   {[
                     { level: 'high', label: 'عالي', count: stats.highPriority, color: 'bg-red-500' },
@@ -1487,7 +1644,7 @@ export default function AdminDashboard() {
                               value={rejectDocState.reason}
                               onChange={(e) => setRejectDocState(prev => prev ? { ...prev, reason: e.target.value } : null)}
                               placeholder="سبب الرفض (يراه المتقدم — ما المطلوب تحديثه)"
-                              className="input text-sm w-48"
+                              className="px-3 py-2 text-sm rounded-xl border-2 border-gold-200 bg-white text-gold-900 focus:ring-2 focus:ring-gold-400/50 focus:border-gold-500 outline-none w-48"
                               autoFocus
                             />
                             <div className="flex gap-2">
@@ -1540,7 +1697,7 @@ export default function AdminDashboard() {
       {previewDoc && (
         <div className="fixed inset-0 z-[60] bg-black/80 flex items-center justify-center p-4" onClick={() => setPreviewDoc(null)}>
           <div className="bg-white rounded-2xl max-w-4xl w-full max-h-[90vh] overflow-hidden flex flex-col" onClick={e => e.stopPropagation()}>
-            <div className="flex justify-between items-center px-4 py-3 border-b border-gray-200">
+            <div className="flex justify-between items-center px-4 py-3 border-b-2 border-gold-200">
               <p className="text-sm font-medium text-gray-900 truncate flex-1 min-w-0">{previewDoc.fileName}</p>
               <a href={previewDoc.url} target="_blank" rel="noopener noreferrer" className="p-2 rounded-lg hover:bg-gray-100 text-gray-600 ml-2">
                 <ExternalLink className="w-4 h-4" />
@@ -1639,21 +1796,30 @@ export default function AdminDashboard() {
         </div>
       )}
 
-      {/* نافذة طلب مستندات — اختيار مستندات محددة + رسالة */}
+      {/* نافذة طلب مستندات إضافية — مستندات مخصصة + رسالة فقط (القياسية موجودة افتراضياً) */}
       {requestDocsAppId && (
-        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50 p-4" style={{ padding: 'max(1rem, env(safe-area-inset-top)) max(1rem, env(safe-area-inset-right)) max(1rem, env(safe-area-inset-bottom)) max(1rem, env(safe-area-inset-left))' }}>
-          <div className="bg-white rounded-3xl w-full max-w-[32rem] max-h-[90vh] overflow-hidden shadow-2xl border border-gray-100 flex flex-col" style={{ margin: 'auto' }}>
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm"
+          style={{
+            paddingLeft: 'max(1rem, env(safe-area-inset-left))',
+            paddingRight: 'max(1rem, env(safe-area-inset-right))',
+            paddingTop: 'max(1rem, env(safe-area-inset-top))',
+            paddingBottom: 'max(1rem, env(safe-area-inset-bottom))',
+          }}
+        >
+          <div className="bg-white rounded-2xl w-full max-w-[28rem] sm:max-w-[32rem] max-h-[90vh] overflow-hidden shadow-xl border border-gray-200 flex flex-col min-h-0 mx-auto">
             {/* Header */}
-            <div className="px-6 py-5 border-b border-gray-100 bg-gradient-to-r from-primary-50 to-white">
-              <div className="flex items-center justify-between">
-                <div>
-                  <h3 className="text-xl font-bold text-gray-900 mb-1">طلب مستندات إضافية</h3>
-                  <p className="text-sm text-gray-600">اختر المستندات المطلوبة أو اكتب رسالة مخصصة</p>
+            <div className="px-4 sm:px-6 py-4 border-b border-gray-100 bg-gray-50/80 shrink-0">
+              <div className="flex items-start justify-between gap-3">
+                <div className="min-w-0 flex-1 text-center sm:text-right">
+                  <h3 className="text-lg font-bold text-gray-900 mb-0.5">طلب مستندات إضافية</h3>
+                  <p className="text-sm text-gray-600">أضف مستندات مخصصة و/أو رسالة للمتقدم</p>
                 </div>
                 <button
                   type="button"
                   onClick={() => { setRequestDocsAppId(null); setRequestDocsMessage(''); setRequestDocsSelectedTypes([]); setRequestDocsCustomTypes([]); setRequestDocsCustomInput(''); }}
-                  className="p-2 rounded-xl hover:bg-gray-100 text-gray-400 hover:text-gray-600 transition-colors"
+                  className="shrink-0 p-2 rounded-xl hover:bg-gray-200 text-gray-500 hover:text-gray-700 transition-colors touch-manipulation min-h-[44px] min-w-[44px] flex items-center justify-center"
+                  aria-label="إغلاق"
                 >
                   <X className="w-5 h-5" />
                 </button>
@@ -1661,56 +1827,12 @@ export default function AdminDashboard() {
             </div>
 
             {/* Content */}
-            <div className="flex-1 overflow-y-auto p-6 space-y-6">
-              {/* Standard Documents */}
-              {requiredDocTypes.filter(d => d.active).length > 0 && (
-                <div>
-                  <div className="flex items-center gap-2 mb-3">
-                    <FileText className="w-5 h-5 text-primary-600" />
-                    <h4 className="text-sm font-semibold text-gray-900">المستندات القياسية</h4>
-                  </div>
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
-                    {requiredDocTypes.filter(d => d.active).map((d) => (
-                      <label
-                        key={d.id}
-                        className={`flex items-center gap-3 p-3.5 rounded-xl border-2 cursor-pointer transition-all ${
-                          requestDocsSelectedTypes.includes(d.label_ar)
-                            ? 'border-primary-500 bg-primary-50 shadow-sm'
-                            : 'border-gray-200 bg-white hover:border-primary-300 hover:bg-primary-50/50'
-                        }`}
-                      >
-                        <input
-                          type="checkbox"
-                          checked={requestDocsSelectedTypes.includes(d.label_ar)}
-                          onChange={(e) => {
-                            if (e.target.checked) setRequestDocsSelectedTypes(prev => [...prev, d.label_ar])
-                            else setRequestDocsSelectedTypes(prev => prev.filter(l => l !== d.label_ar))
-                          }}
-                          className="w-4 h-4 rounded border-gray-300 text-primary-600 focus:ring-2 focus:ring-primary-500/20"
-                        />
-                        <span className={`text-sm font-medium ${
-                          requestDocsSelectedTypes.includes(d.label_ar) ? 'text-primary-900' : 'text-gray-700'
-                        }`}>
-                          {d.label_ar}
-                        </span>
-                      </label>
-                    ))}
-                  </div>
-                </div>
-              )}
-
-              {/* Custom Documents */}
-              <div className="bg-gradient-to-br from-indigo-50/50 to-purple-50/50 rounded-2xl border border-indigo-100 p-5">
-                <div className="flex items-start gap-3 mb-3">
-                  <div className="p-2 rounded-xl bg-indigo-100">
-                    <FilePlus className="w-5 h-5 text-indigo-600" />
-                  </div>
-                  <div className="flex-1">
-                    <h4 className="text-sm font-semibold text-gray-900 mb-1">مستندات مخصصة</h4>
-                    <p className="text-xs text-gray-600">أضف نوع مستند غير موجود في القائمة. تظهر للمتقدم الحالي فقط</p>
-                  </div>
-                </div>
-                <div className="flex gap-2 mb-3">
+            <div className="flex-1 overflow-y-auto overflow-x-hidden p-4 sm:p-6 space-y-4">
+              {/* Custom Documents only — standard docs are required by default */}
+              <div className="rounded-xl border border-gray-200 bg-gray-50/50 p-4">
+                <h4 className="text-sm font-semibold text-gray-900 mb-1">مستندات مخصصة</h4>
+                <p className="text-xs text-gray-600 mb-3">أضف نوع مستند غير موجود في القائمة. تظهر للمتقدم الحالي فقط</p>
+                <div className="flex flex-col sm:flex-row gap-2 mb-3">
                   <input
                     type="text"
                     value={requestDocsCustomInput}
@@ -1725,7 +1847,7 @@ export default function AdminDashboard() {
                         }
                       }
                     }}
-                    className="flex-1 px-4 py-3 text-sm border-2 border-gray-200 rounded-xl bg-white focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 outline-none transition-all"
+                    className="flex-1 min-w-0 px-3 py-2.5 text-sm border border-gray-300 rounded-lg bg-white focus:ring-2 focus:ring-primary-300 focus:border-primary-500 outline-none"
                     placeholder="مثال: شهادة عدم ملكية"
                   />
                   <button
@@ -1738,7 +1860,7 @@ export default function AdminDashboard() {
                       }
                     }}
                     disabled={!requestDocsCustomInput.trim()}
-                    className="shrink-0 inline-flex items-center gap-2 px-5 py-3 rounded-xl bg-indigo-600 text-white text-sm font-semibold hover:bg-indigo-700 disabled:opacity-50 disabled:pointer-events-none shadow-sm transition-all"
+                    className="shrink-0 inline-flex items-center justify-center gap-1.5 px-4 py-2.5 rounded-lg bg-primary-600 text-white text-sm font-medium hover:bg-primary-700 disabled:opacity-50 disabled:pointer-events-none min-h-[44px] touch-manipulation"
                   >
                     <Plus className="w-4 h-4" />
                     إضافة
@@ -1749,13 +1871,13 @@ export default function AdminDashboard() {
                     {requestDocsCustomTypes.map((label) => (
                       <div
                         key={label}
-                        className="inline-flex items-center gap-2 py-2 pl-3 pr-2 rounded-xl bg-white border border-indigo-200 text-sm font-medium text-gray-800 shadow-sm"
+                        className="inline-flex items-center gap-1.5 py-1.5 pl-2.5 pr-1.5 rounded-lg bg-white border border-gray-200 text-sm text-gray-800"
                       >
                         <span>{label}</span>
                         <button
                           type="button"
                           onClick={() => setRequestDocsCustomTypes(prev => prev.filter(l => l !== label))}
-                          className="p-1 rounded-lg hover:bg-red-50 text-gray-400 hover:text-red-600 transition-colors"
+                          className="p-1 rounded hover:bg-red-50 text-gray-400 hover:text-red-600"
                           aria-label="إزالة"
                         >
                           <X className="w-3.5 h-3.5" />
@@ -1768,22 +1890,21 @@ export default function AdminDashboard() {
 
               {/* Additional Message */}
               <div>
-                <label className="flex items-center gap-2 mb-2.5">
-                  <span className="text-sm font-semibold text-gray-900">رسالة إضافية</span>
-                  <span className="text-xs text-gray-500">(اختياري)</span>
+                <label className="block text-sm font-semibold text-gray-900 mb-1.5">
+                  رسالة إضافية <span className="text-gray-500 font-normal">(اختياري)</span>
                 </label>
                 <textarea
                   value={requestDocsMessage}
                   onChange={(e) => setRequestDocsMessage(e.target.value)}
-                  className="w-full px-4 py-3 text-sm border-2 border-gray-200 rounded-xl bg-white focus:ring-2 focus:ring-primary-500/20 focus:border-primary-500 outline-none resize-none transition-all"
+                  className="w-full min-w-0 px-3 py-2.5 text-sm border border-gray-300 rounded-lg bg-white focus:ring-2 focus:ring-primary-300 focus:border-primary-500 outline-none resize-none"
                   placeholder="مثال: يرجى إرسال المستندات عبر صفحة تفاصيل الطلب قبل نهاية الأسبوع."
-                  rows={4}
+                  rows={3}
                 />
               </div>
             </div>
 
             {/* Footer */}
-            <div className="px-6 py-4 border-t border-gray-100 bg-gray-50/50 flex gap-3">
+            <div className="px-4 sm:px-6 py-4 border-t border-gray-200 bg-gray-50 flex flex-col-reverse sm:flex-row gap-3 shrink-0" style={{ paddingBottom: 'max(1rem, env(safe-area-inset-bottom))' }}>
               <button
                 type="button"
                 onClick={() => {
@@ -1793,7 +1914,7 @@ export default function AdminDashboard() {
                   setRequestDocsCustomTypes([])
                   setRequestDocsCustomInput('')
                 }}
-                className="flex-1 px-5 py-3 rounded-xl border-2 border-gray-300 bg-white text-gray-700 text-sm font-semibold hover:bg-gray-50 hover:border-gray-400 transition-all"
+                className="flex-1 min-h-[48px] px-5 py-3 rounded-xl border-2 border-gray-300 bg-white text-gray-700 text-sm font-semibold hover:bg-gray-50 hover:border-gray-400 transition-all touch-manipulation"
               >
                 إلغاء
               </button>
@@ -1801,7 +1922,7 @@ export default function AdminDashboard() {
                 type="button"
                 onClick={async () => {
                   const parts: string[] = []
-                  const allSelected = [...requestDocsSelectedTypes, ...requestDocsCustomTypes]
+                  const allSelected = [...requestDocsCustomTypes]
                   if (allSelected.length > 0) {
                     parts.push('المطلوب:')
                     allSelected.forEach(l => parts.push('• ' + l))
@@ -1821,7 +1942,7 @@ export default function AdminDashboard() {
                   const app = applications.find((a: any) => a.id === requestDocsAppId)
                   const phoneNumber = app?.profiles?.phone_number || app?.phone
                   
-                  if (phoneNumber && allSelected.length > 0) {
+                  if (phoneNumber && (allSelected.length > 0 || requestDocsMessage.trim())) {
                     try {
                       const response = await fetch('/api/whatsapp/send', {
                         method: 'POST',
@@ -1841,7 +1962,6 @@ export default function AdminDashboard() {
                       }
                     } catch (error) {
                       console.error('Error sending WhatsApp notification:', error)
-                      // Don't show error to user, just log it
                     }
                   }
                   
@@ -1853,7 +1973,7 @@ export default function AdminDashboard() {
                   setRequestDocsCustomInput('')
                   loadData()
                 }}
-                className="flex-1 px-5 py-3 rounded-xl bg-gradient-to-r from-primary-600 to-primary-700 text-white text-sm font-semibold hover:from-primary-700 hover:to-primary-800 shadow-lg hover:shadow-xl transition-all"
+                className="flex-1 min-h-[48px] px-5 py-3 rounded-xl bg-gradient-to-r from-primary-600 to-primary-700 text-white text-sm font-semibold hover:from-primary-700 hover:to-primary-800 shadow-lg hover:shadow-xl transition-all touch-manipulation"
               >
                 إرسال للمتقدم
               </button>
@@ -1985,7 +2105,7 @@ export default function AdminDashboard() {
                     const status = parsed.status || 'pending_review'
                     const isRejecting = rejectPurchaseDocState?.purchaseId === showPurchaseDocsModal.id && rejectPurchaseDocState?.docIndex === idx
                     return (
-                      <li key={idx} className={`flex flex-wrap items-center justify-between gap-2 py-3 px-3 rounded-xl border ${status === 'rejected' ? 'border-red-200 bg-red-50/80' : 'border-gray-200 bg-gray-50'}`}>
+                      <li key={idx} className={`flex flex-wrap items-center justify-between gap-2 py-3 px-3 rounded-xl border ${status === 'rejected' ? 'border-red-200 bg-red-50/80' : 'border-gold-200 bg-gold-50'}`}>
                         <div className="min-w-0 flex-1">
                           <p className="text-sm font-medium text-gray-900 truncate">{fileName}</p>
                           {parsed.docType && <p className="text-xs text-gray-500">{parsed.docType}</p>}
@@ -2008,7 +2128,7 @@ export default function AdminDashboard() {
                                 value={rejectPurchaseDocState?.reason ?? ''}
                                 onChange={(e) => setRejectPurchaseDocState(prev => prev ? { ...prev, reason: e.target.value } : null)}
                                 placeholder="سبب الرفض (يراه المستخدم — ما المطلوب تحديثه)"
-                                className="input text-sm w-48"
+                                className="px-3 py-2 text-sm rounded-xl border-2 border-gold-200 bg-white text-gold-900 focus:ring-2 focus:ring-gold-400/50 focus:border-gold-500 outline-none w-48"
                                 autoFocus
                               />
                               <div className="flex gap-2">
@@ -2047,16 +2167,23 @@ export default function AdminDashboard() {
         )
       })()}
 
-      {/* Request Documents for Purchase */}
+      {/* Request Documents for Purchase — custom docs + message only */}
       {requestPurchaseDocsId && (
-        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50 p-4" style={{ padding: 'max(1rem, env(safe-area-inset-top)) max(1rem, env(safe-area-inset-right)) max(1rem, env(safe-area-inset-bottom)) max(1rem, env(safe-area-inset-left))' }}>
-          <div className="bg-white rounded-3xl w-full max-w-[32rem] max-h-[90vh] overflow-hidden shadow-2xl border border-gray-100 flex flex-col" style={{ margin: 'auto' }}>
-            {/* Header */}
-            <div className="px-6 py-5 border-b border-gray-100 bg-gradient-to-r from-primary-50 to-white">
-              <div className="flex items-center justify-between">
-                <div>
-                  <h3 className="text-xl font-bold text-gray-900 mb-1">طلب مستندات إضافية</h3>
-                  <p className="text-sm text-gray-600">اختر المستندات المطلوبة أو اكتب رسالة مخصصة</p>
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm"
+          style={{
+            paddingLeft: 'max(1rem, env(safe-area-inset-left))',
+            paddingRight: 'max(1rem, env(safe-area-inset-right))',
+            paddingTop: 'max(1rem, env(safe-area-inset-top))',
+            paddingBottom: 'max(1rem, env(safe-area-inset-bottom))',
+          }}
+        >
+          <div className="bg-white rounded-2xl w-full max-w-[28rem] sm:max-w-[32rem] max-h-[90vh] overflow-hidden shadow-xl border border-gray-200 flex flex-col min-h-0 mx-auto">
+            <div className="px-4 sm:px-6 py-4 border-b border-gray-100 bg-gray-50/80 shrink-0">
+              <div className="flex items-start justify-between gap-3">
+                <div className="min-w-0 flex-1 text-center sm:text-right">
+                  <h3 className="text-lg font-bold text-gray-900 mb-0.5">طلب مستندات إضافية</h3>
+                  <p className="text-sm text-gray-600">أضف مستندات مخصصة و/أو رسالة للمستخدم</p>
                 </div>
                 <button
                   type="button"
@@ -2067,64 +2194,19 @@ export default function AdminDashboard() {
                     setRequestPurchaseDocsCustomTypes([])
                     setRequestPurchaseDocsCustomInput('')
                   }}
-                  className="p-2 rounded-xl hover:bg-gray-100 text-gray-400 hover:text-gray-600 transition-colors"
+                  className="shrink-0 p-2 rounded-xl hover:bg-gray-200 text-gray-500 hover:text-gray-700 transition-colors touch-manipulation min-h-[44px] min-w-[44px] flex items-center justify-center"
+                  aria-label="إغلاق"
                 >
                   <X className="w-5 h-5" />
                 </button>
               </div>
             </div>
 
-            {/* Content */}
-            <div className="flex-1 overflow-y-auto p-6 space-y-6">
-              {/* Standard Documents */}
-              {requiredDocTypes.filter(d => d.active).length > 0 && (
-                <div>
-                  <div className="flex items-center gap-2 mb-3">
-                    <FileText className="w-5 h-5 text-primary-600" />
-                    <h4 className="text-sm font-semibold text-gray-900">المستندات القياسية</h4>
-                  </div>
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
-                    {requiredDocTypes.filter(d => d.active).map((d) => (
-                      <label
-                        key={d.id}
-                        className={`flex items-center gap-3 p-3.5 rounded-xl border-2 cursor-pointer transition-all ${
-                          requestDocsSelectedTypes.includes(d.label_ar)
-                            ? 'border-primary-500 bg-primary-50 shadow-sm'
-                            : 'border-gray-200 bg-white hover:border-primary-300 hover:bg-primary-50/50'
-                        }`}
-                      >
-                        <input
-                          type="checkbox"
-                          checked={requestDocsSelectedTypes.includes(d.label_ar)}
-                          onChange={(e) => {
-                            if (e.target.checked) setRequestDocsSelectedTypes(prev => [...prev, d.label_ar])
-                            else setRequestDocsSelectedTypes(prev => prev.filter(l => l !== d.label_ar))
-                          }}
-                          className="w-4 h-4 rounded border-gray-300 text-primary-600 focus:ring-2 focus:ring-primary-500/20"
-                        />
-                        <span className={`text-sm font-medium ${
-                          requestDocsSelectedTypes.includes(d.label_ar) ? 'text-primary-900' : 'text-gray-700'
-                        }`}>
-                          {d.label_ar}
-                        </span>
-                      </label>
-                    ))}
-                  </div>
-                </div>
-              )}
-
-              {/* Custom Documents */}
-              <div className="bg-gradient-to-br from-indigo-50/50 to-purple-50/50 rounded-2xl border border-indigo-100 p-5">
-                <div className="flex items-start gap-3 mb-3">
-                  <div className="p-2 rounded-xl bg-indigo-100">
-                    <FilePlus className="w-5 h-5 text-indigo-600" />
-                  </div>
-                  <div className="flex-1">
-                    <h4 className="text-sm font-semibold text-gray-900 mb-1">مستندات مخصصة</h4>
-                    <p className="text-xs text-gray-600">أضف نوع مستند غير موجود في القائمة. تظهر للمستخدم الحالي فقط</p>
-                  </div>
-                </div>
-                <div className="flex gap-2 mb-3">
+            <div className="flex-1 overflow-y-auto overflow-x-hidden p-4 sm:p-6 space-y-4">
+              <div className="rounded-xl border border-gray-200 bg-gray-50/50 p-4">
+                <h4 className="text-sm font-semibold text-gray-900 mb-1">مستندات مخصصة</h4>
+                <p className="text-xs text-gray-600 mb-3">أضف نوع مستند غير موجود في القائمة. تظهر للمستخدم الحالي فقط</p>
+                <div className="flex flex-col sm:flex-row gap-2 mb-3">
                   <input
                     type="text"
                     value={requestPurchaseDocsCustomInput}
@@ -2139,8 +2221,8 @@ export default function AdminDashboard() {
                         }
                       }
                     }}
-                    className="flex-1 px-4 py-3 text-sm border-2 border-gray-200 rounded-xl bg-white focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 outline-none transition-all"
-                    placeholder="مثال: عقد ملكية"
+                    className="flex-1 min-w-0 px-3 py-2.5 text-sm border border-gray-300 rounded-lg bg-white focus:ring-2 focus:ring-primary-300 focus:border-primary-500 outline-none"
+                    placeholder="مثال: شهادة عدم ملكية"
                   />
                   <button
                     type="button"
@@ -2152,7 +2234,7 @@ export default function AdminDashboard() {
                       }
                     }}
                     disabled={!requestPurchaseDocsCustomInput.trim()}
-                    className="shrink-0 inline-flex items-center gap-2 px-5 py-3 rounded-xl bg-indigo-600 text-white text-sm font-semibold hover:bg-indigo-700 disabled:opacity-50 disabled:pointer-events-none shadow-sm transition-all"
+                    className="shrink-0 inline-flex items-center justify-center gap-1.5 px-4 py-2.5 rounded-lg bg-primary-600 text-white text-sm font-medium hover:bg-primary-700 disabled:opacity-50 disabled:pointer-events-none min-h-[44px] touch-manipulation"
                   >
                     <Plus className="w-4 h-4" />
                     إضافة
@@ -2163,13 +2245,13 @@ export default function AdminDashboard() {
                     {requestPurchaseDocsCustomTypes.map((label) => (
                       <div
                         key={label}
-                        className="inline-flex items-center gap-2 py-2 pl-3 pr-2 rounded-xl bg-white border border-indigo-200 text-sm font-medium text-gray-800 shadow-sm"
+                        className="inline-flex items-center gap-1.5 py-1.5 pl-2.5 pr-1.5 rounded-lg bg-white border border-gray-200 text-sm text-gray-800"
                       >
                         <span>{label}</span>
                         <button
                           type="button"
                           onClick={() => setRequestPurchaseDocsCustomTypes(prev => prev.filter(l => l !== label))}
-                          className="p-1 rounded-lg hover:bg-red-50 text-gray-400 hover:text-red-600 transition-colors"
+                          className="p-1 rounded hover:bg-red-50 text-gray-400 hover:text-red-600"
                           aria-label="إزالة"
                         >
                           <X className="w-3.5 h-3.5" />
@@ -2180,24 +2262,21 @@ export default function AdminDashboard() {
                 )}
               </div>
 
-              {/* Additional Message */}
               <div>
-                <label className="flex items-center gap-2 mb-2.5">
-                  <span className="text-sm font-semibold text-gray-900">رسالة إضافية</span>
-                  <span className="text-xs text-gray-500">(اختياري)</span>
+                <label className="block text-sm font-semibold text-gray-900 mb-1.5">
+                  رسالة إضافية <span className="text-gray-500 font-normal">(اختياري)</span>
                 </label>
                 <textarea
                   value={requestPurchaseDocsMessage}
                   onChange={(e) => setRequestPurchaseDocsMessage(e.target.value)}
-                  className="w-full px-4 py-3 text-sm border-2 border-gray-200 rounded-xl bg-white focus:ring-2 focus:ring-primary-500/20 focus:border-primary-500 outline-none resize-none transition-all"
+                  className="w-full min-w-0 px-3 py-2.5 text-sm border border-gray-300 rounded-lg bg-white focus:ring-2 focus:ring-primary-300 focus:border-primary-500 outline-none resize-none"
                   placeholder="مثال: يرجى إرسال المستندات المطلوبة."
-                  rows={4}
+                  rows={3}
                 />
               </div>
             </div>
 
-            {/* Footer */}
-            <div className="px-6 py-4 border-t border-gray-100 bg-gray-50/50 flex gap-3">
+            <div className="px-4 sm:px-6 py-4 border-t border-gray-200 bg-gray-50 flex flex-col-reverse sm:flex-row gap-3 shrink-0" style={{ paddingBottom: 'max(1rem, env(safe-area-inset-bottom))' }}>
               <button
                 type="button"
                 onClick={() => {
@@ -2207,7 +2286,7 @@ export default function AdminDashboard() {
                   setRequestPurchaseDocsCustomTypes([])
                   setRequestPurchaseDocsCustomInput('')
                 }}
-                className="flex-1 px-5 py-3 rounded-xl border-2 border-gray-300 bg-white text-gray-700 text-sm font-semibold hover:bg-gray-50 hover:border-gray-400 transition-all"
+                className="flex-1 min-h-[48px] px-5 py-3 rounded-xl border-2 border-gray-300 bg-white text-gray-700 text-sm font-semibold hover:bg-gray-50 hover:border-gray-400 transition-all touch-manipulation"
               >
                 إلغاء
               </button>
@@ -2215,7 +2294,7 @@ export default function AdminDashboard() {
                 type="button"
                 onClick={async () => {
                   const parts: string[] = []
-                  const allSelected = [...requestDocsSelectedTypes, ...requestPurchaseDocsCustomTypes]
+                  const allSelected = [...requestPurchaseDocsCustomTypes]
                   if (allSelected.length > 0) {
                     parts.push('المطلوب:')
                     allSelected.forEach(l => parts.push('• ' + l))
@@ -2235,7 +2314,7 @@ export default function AdminDashboard() {
                   const purchase = directPurchases.find((p: any) => p.id === requestPurchaseDocsId)
                   const phoneNumber = purchase?.profiles?.phone_number || purchase?.phone
                   
-                  if (phoneNumber && allSelected.length > 0) {
+                  if (phoneNumber && (allSelected.length > 0 || requestPurchaseDocsMessage.trim())) {
                     try {
                       const response = await fetch('/api/whatsapp/send', {
                         method: 'POST',
@@ -2266,7 +2345,7 @@ export default function AdminDashboard() {
                   setRequestPurchaseDocsCustomInput('')
                   loadData()
                 }}
-                className="flex-1 px-5 py-3 rounded-xl bg-gradient-to-r from-primary-600 to-primary-700 text-white text-sm font-semibold hover:from-primary-700 hover:to-primary-800 shadow-lg hover:shadow-xl transition-all"
+                className="flex-1 min-h-[48px] px-5 py-3 rounded-xl bg-gradient-to-r from-primary-600 to-primary-700 text-white text-sm font-semibold hover:from-primary-700 hover:to-primary-800 shadow-lg hover:shadow-xl transition-all touch-manipulation"
               >
                 إرسال للمستخدم
               </button>
@@ -2275,29 +2354,202 @@ export default function AdminDashboard() {
         </div>
       )}
 
-      {/* Progress Update Modal for Applications */}
+      {/* Progress Update Modal for Applications / Purchases */}
       {showProgressModal && (
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50" style={{ padding: 'max(1rem, env(safe-area-inset-top)) max(1rem, env(safe-area-inset-right)) max(1rem, env(safe-area-inset-bottom)) max(1rem, env(safe-area-inset-left))' }}>
           <div className="bg-white rounded-3xl w-full max-w-[28rem] max-h-[90vh] overflow-y-auto p-6 shadow-xl" style={{ margin: 'auto' }}>
             <div className="flex justify-between items-start mb-4">
               <h3 className="text-lg font-bold text-gray-900">تحديث التقدم</h3>
-              <button onClick={() => { setShowProgressModal(null); setProgressStage(''); setProgressPercentage(0); setProgressNotes(''); }} className="p-1.5 rounded-lg hover:bg-gray-100">
+              <button onClick={() => { setShowProgressModal(null); setProgressStage(''); setProgressPercentage(0); setProgressNotes(''); setProgressStageManage(false); setNewProgressStageLabel(''); setEditingProgressStageId(null); setCustomStagesForItem(null); setShowCustomStagesEditor(false); }} className="p-1.5 rounded-lg hover:bg-gray-100">
                 <X className="w-5 h-5 text-gray-500" />
               </button>
             </div>
             <div className="space-y-4">
               <div>
                 <label className="block text-xs font-medium text-gray-600 mb-1.5">المرحلة</label>
-                <select
-                  value={progressStage}
-                  onChange={(e) => setProgressStage(e.target.value)}
-                  className="input w-full"
+                {(() => {
+                  const isPurchase = showProgressModal && 'project_id' in showProgressModal
+                  const useCustomList = Array.isArray(customStagesForItem) && customStagesForItem.length > 0
+                  const options = useCustomList
+                    ? customStagesForItem.map((label, i) => ({ value: label, label_ar: label }))
+                    : progressStages.map(s => ({ value: s.value ?? s.id, label_ar: s.label_ar }))
+                  return (
+                    <>
+                      {useCustomList && <p className="text-xs text-amber-700 mb-1">مراحل مخصصة لهذا {isPurchase ? 'المشروع' : 'الطلب'} فقط</p>}
+                      <select
+                        value={progressStage}
+                        onChange={(e) => setProgressStage(e.target.value)}
+                        className="w-full px-4 py-3 rounded-xl border-2 border-gold-200 bg-white text-gold-900 focus:ring-2 focus:ring-gold-400/50 focus:border-gold-500 outline-none"
+                      >
+                        <option value="">اختر المرحلة</option>
+                        {options.map((o, i) => (
+                          <option key={i} value={o.value}>{o.label_ar}</option>
+                        ))}
+                      </select>
+                    </>
+                  )
+                })()}
+                {!showCustomStagesEditor && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      if (customStagesForItem === null) {
+                        setCustomStagesForItem([])
+                        setShowCustomStagesEditor(true)
+                      } else {
+                        setShowCustomStagesEditor(true)
+                      }
+                    }}
+                    className="mt-2 text-xs text-amber-600 hover:underline"
+                  >
+                    {customStagesForItem !== null ? 'تعديل المراحل المخصصة لهذا ' + (showProgressModal && 'project_id' in showProgressModal ? 'المشروع' : 'الطلب') : 'استخدام مراحل مخصصة لهذا ' + (showProgressModal && 'project_id' in showProgressModal ? 'المشروع فقط' : 'الطلب فقط')}
+                  </button>
+                )}
+                {showCustomStagesEditor && (
+                  <div className="mt-3 p-3 rounded-xl border border-amber-200 bg-amber-50/50 space-y-2">
+                    <p className="text-xs text-gray-700">أضف مراحل تظهر لهذا {showProgressModal && 'project_id' in showProgressModal ? 'المشروع' : 'الطلب'} فقط. عند الحفظ ستُستبدل المراحل العامة.</p>
+                    <div className="flex gap-2">
+                      <input
+                        type="text"
+                        value={customStageNewLabel}
+                        onChange={(e) => setCustomStageNewLabel(e.target.value)}
+                        placeholder="اسم المرحلة"
+                        className="flex-1 min-w-0 px-2 py-1.5 text-sm border border-gray-300 rounded-lg"
+                        onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); const t = customStageNewLabel.trim(); if (t) { setCustomStagesForItem(prev => [...(prev || []), t]); setCustomStageNewLabel(''); } } }}
+                      />
+                      <button type="button" onClick={() => { const t = customStageNewLabel.trim(); if (t) { setCustomStagesForItem(prev => [...(prev || []), t]); setCustomStageNewLabel(''); } }} className="shrink-0 px-2 py-1.5 rounded-lg bg-amber-600 text-white text-xs">إضافة</button>
+                    </div>
+                    <ul className="space-y-1 max-h-32 overflow-y-auto">
+                      {(customStagesForItem || []).map((label, i) => (
+                        <li key={i} className="flex items-center justify-between gap-2 py-1 text-sm">
+                          <span>{label}</span>
+                          <button type="button" onClick={() => setCustomStagesForItem(prev => prev ? prev.filter((_, j) => j !== i) : [])} className="text-red-600 text-xs">حذف</button>
+                        </li>
+                      ))}
+                    </ul>
+                    <div className="flex gap-2 pt-1">
+                      <button
+                        type="button"
+                        onClick={async () => {
+                          const isPurchase = showProgressModal && 'project_id' in showProgressModal
+                          const payload = customStagesForItem && customStagesForItem.length > 0 ? customStagesForItem : null
+                          if (isPurchase) {
+                            const projectId = (showProgressModal as any).project_id
+                            const { error } = await supabase.from('projects').update({ custom_progress_stages: payload }).eq('id', projectId)
+                            if (error) toast.error('فشل الحفظ')
+                            else { toast.success('تم حفظ المراحل المخصصة'); loadData(); setShowCustomStagesEditor(false) }
+                          } else {
+                            const { error } = await supabase.from('housing_applications').update({ custom_progress_stages: payload }).eq('id', showProgressModal.id)
+                            if (error) toast.error('فشل الحفظ')
+                            else { toast.success('تم حفظ المراحل المخصصة'); loadData(); setShowCustomStagesEditor(false) }
+                          }
+                        }}
+                        className="px-3 py-1.5 rounded-lg bg-amber-600 text-white text-xs font-medium"
+                      >
+                        حفظ المراحل المخصصة
+                      </button>
+                      <button type="button" onClick={() => setShowCustomStagesEditor(false)} className="px-3 py-1.5 rounded-lg bg-gray-200 text-gray-700 text-xs">إلغاء</button>
+                      {customStagesForItem !== null && (
+                        <button
+                          type="button"
+                          onClick={async () => {
+                            if (!confirm('العودة للمراحل العامة؟ ستُزال المراحل المخصصة.')) return
+                            const isPurchase = showProgressModal && 'project_id' in showProgressModal
+                            if (isPurchase) {
+                              const projectId = (showProgressModal as any).project_id
+                              await supabase.from('projects').update({ custom_progress_stages: null }).eq('id', projectId)
+                            } else {
+                              await supabase.from('housing_applications').update({ custom_progress_stages: null }).eq('id', showProgressModal.id)
+                            }
+                            setCustomStagesForItem(null)
+                            setShowCustomStagesEditor(false)
+                            loadData()
+                            toast.success('تم العودة للمراحل العامة')
+                          }}
+                          className="px-3 py-1.5 rounded-lg bg-gray-100 text-gray-600 text-xs"
+                        >
+                          العودة للمراحل العامة
+                        </button>
+                      )}
+                    </div>
+                  </div>
+                )}
+                <button
+                  type="button"
+                  onClick={() => setProgressStageManage(prev => !prev)}
+                  className="mt-2 text-xs text-primary-600 hover:underline"
                 >
-                  <option value="">اختر المرحلة</option>
-                  {PROGRESS_STAGES.map(s => (
-                    <option key={s.value} value={s.value}>{s.label}</option>
-                  ))}
-                </select>
+                  {progressStageManage ? 'إخفاء إدارة المراحل' : 'إدارة المراحل (إضافة/تعديل مراحل مخصصة)'}
+                </button>
+                {progressStageManage && (
+                  <div className="mt-3 p-3 rounded-xl border border-gray-200 bg-gray-50 space-y-3">
+                    <p className="text-xs text-gray-600">المراحل الافتراضية (دراسة، تصميم، بناء...) لا تُحذف. يمكنك إضافة مراحل مخصصة وتعديلها أو حذفها.</p>
+                    <div className="flex gap-2">
+                      <input
+                        type="text"
+                        value={newProgressStageLabel}
+                        onChange={(e) => setNewProgressStageLabel(e.target.value)}
+                        placeholder="اسم المرحلة المخصصة"
+                        className="flex-1 min-w-0 px-3 py-2 text-sm border border-gray-300 rounded-lg"
+                      />
+                      <button
+                        type="button"
+                        onClick={async () => {
+                          const label = newProgressStageLabel.trim()
+                          if (!label) return
+                          const maxOrder = progressStages.length ? Math.max(...progressStages.map(s => s.sort_order)) : 0
+                          const { error } = await supabase.from('progress_stages').insert({ label_ar: label, sort_order: maxOrder + 1, is_system: false })
+                          if (error) toast.error('فشل الإضافة')
+                          else { toast.success('تمت إضافة المرحلة'); setNewProgressStageLabel(''); loadProgressStages() }
+                        }}
+                        className="shrink-0 px-3 py-2 rounded-lg bg-primary-600 text-white text-sm font-medium"
+                      >
+                        إضافة
+                      </button>
+                    </div>
+                    <div className="space-y-1.5 max-h-40 overflow-y-auto">
+                      {progressStages.filter(s => !s.is_system).map(s => (
+                        <div key={s.id} className="flex items-center gap-2 py-1.5">
+                          {editingProgressStageId === s.id ? (
+                            <>
+                              <input
+                                type="text"
+                                value={editingProgressStageLabel}
+                                onChange={(e) => setEditingProgressStageLabel(e.target.value)}
+                                className="flex-1 min-w-0 px-2 py-1.5 text-sm border border-gray-300 rounded"
+                              />
+                              <button type="button" onClick={async () => {
+                                const { error } = await supabase.from('progress_stages').update({ label_ar: editingProgressStageLabel.trim() }).eq('id', s.id)
+                                if (error) toast.error('فشل التعديل')
+                                else { toast.success('تم التعديل'); setEditingProgressStageId(null); loadProgressStages() }
+                              }} className="text-xs text-primary-600">حفظ</button>
+                              <button type="button" onClick={() => setEditingProgressStageId(null)} className="text-xs text-gray-500">إلغاء</button>
+                            </>
+                          ) : (
+                            <>
+                              <span className="flex-1 text-sm text-gray-800">{s.label_ar}</span>
+                              <button type="button" onClick={() => { setEditingProgressStageId(s.id); setEditingProgressStageLabel(s.label_ar); }} className="text-xs text-primary-600">تعديل</button>
+                              <button
+                                type="button"
+                                onClick={async () => {
+                                  const { error } = await supabase.from('progress_stages').delete().eq('id', s.id)
+                                  if (error) toast.error('فشل الحذف')
+                                  else { toast.success('تم الحذف'); loadProgressStages(); if (progressStage === s.id) setProgressStage('') }
+                                }}
+                                className="text-xs text-red-600"
+                              >
+                                حذف
+                              </button>
+                            </>
+                          )}
+                        </div>
+                      ))}
+                      {progressStages.filter(s => !s.is_system).length === 0 && (
+                        <p className="text-xs text-gray-500">لا توجد مراحل مخصصة. أضف واحدة أعلاه.</p>
+                      )}
+                    </div>
+                  </div>
+                )}
               </div>
               <div>
                 <label className="block text-xs font-medium text-gray-600 mb-1.5">نسبة الإنجاز (%)</label>
@@ -2307,10 +2559,10 @@ export default function AdminDashboard() {
                   max="100"
                   value={progressPercentage}
                   onChange={(e) => setProgressPercentage(parseInt(e.target.value) || 0)}
-                  className="input w-full"
+                  className="w-full px-4 py-3 rounded-xl border-2 border-gold-200 bg-white text-gold-900 focus:ring-2 focus:ring-gold-400/50 focus:border-gold-500 outline-none"
                 />
                 <div className="mt-2 w-full bg-gray-200 rounded-full h-2">
-                  <div className="bg-primary-500 h-2 rounded-full transition-all" style={{ width: `${progressPercentage}%` }} />
+                  <div className="bg-gold-600 h-2 rounded-full transition-all" style={{ width: `${progressPercentage}%` }} />
                 </div>
               </div>
               <div>
@@ -2318,7 +2570,7 @@ export default function AdminDashboard() {
                 <textarea
                   value={progressNotes}
                   onChange={(e) => setProgressNotes(e.target.value)}
-                  className="input w-full min-h-[80px]"
+                  className="w-full min-h-[80px] px-4 py-3 rounded-xl border-2 border-gold-200 bg-white text-gold-900 focus:ring-2 focus:ring-gold-400/50 focus:border-gold-500 outline-none resize-none"
                   placeholder="مثال: تم الانتهاء من المرحلة الأولى..."
                   rows={3}
                 />
@@ -2326,7 +2578,7 @@ export default function AdminDashboard() {
               <div className="flex gap-3 pt-2">
                 <button
                   type="button"
-                  onClick={() => { setShowProgressModal(null); setProgressStage(''); setProgressPercentage(0); setProgressNotes(''); }}
+                  onClick={() => { setShowProgressModal(null); setProgressStage(''); setProgressPercentage(0); setProgressNotes(''); setProgressStageManage(false); setCustomStagesForItem(null); setShowCustomStagesEditor(false); }}
                   className="btn-secondary flex-1"
                 >
                   إلغاء
@@ -2335,8 +2587,20 @@ export default function AdminDashboard() {
                   type="button"
                   onClick={async () => {
                     const isPurchase = showProgressModal && 'project_id' in showProgressModal
+                    const useCustomList = Array.isArray(customStagesForItem) && customStagesForItem.length > 0
+                    const systemValues = ['study', 'design', 'construction', 'finishing', 'ready']
+                    const stageValueToSave = progressStage
+                      ? (useCustomList
+                        ? progressStage
+                        : systemValues.includes(progressStage)
+                          ? progressStage
+                          : (() => {
+                              const custom = progressStages.find(s => s.id === progressStage)
+                              return custom ? custom.label_ar : progressStage
+                            })())
+                      : null
                     const payload = {
-                      progress_stage: progressStage || null,
+                      progress_stage: stageValueToSave,
                       progress_percentage: progressPercentage,
                       progress_notes: progressNotes.trim() || null,
                       progress_updated_at: new Date().toISOString(),
@@ -2351,6 +2615,7 @@ export default function AdminDashboard() {
                       setProgressStage('')
                       setProgressPercentage(0)
                       setProgressNotes('')
+                      setProgressStageManage(false)
                       loadData()
                     }
                   }}
@@ -2375,7 +2640,7 @@ export default function AdminDashboard() {
               type="date"
               value={extendEndDate}
               onChange={(e) => setExtendEndDate(e.target.value)}
-              className="input w-full mb-4"
+              className="w-full mb-4 px-4 py-3 rounded-xl border-2 border-gold-200 bg-white text-gold-900 focus:ring-2 focus:ring-gold-400/50 focus:border-gold-500 outline-none"
             />
             <div className="flex gap-3">
               <button type="button" onClick={() => { setExtendProject(null); setExtendEndDate(''); }} className="btn-secondary flex-1">إلغاء</button>

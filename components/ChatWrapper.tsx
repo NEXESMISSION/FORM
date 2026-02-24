@@ -1,20 +1,38 @@
 'use client'
 
+import { useEffect, useState } from 'react'
+import { usePathname } from 'next/navigation'
 import { ChatProvider } from '@/components/ChatContext'
 import ChatWidget from '@/components/ChatWidget'
-import ChatHeaderButton from '@/components/ChatHeaderButton'
+import ChatFab from '@/components/ChatFab'
+
+const HIDE_CHAT_PATHS = ['/auth/login', '/auth/register', '/dashboard/admin']
 
 /**
- * Fixed top-right chat trigger + panel. Renders a simple "دردشة" strip so the button is in the header area on every page.
+ * Floating chat trigger (bottom-right circle) + chat panel.
+ * Hidden on login, signup, and when onboarding is visible.
  */
 function ChatUI() {
+  const pathname = usePathname()
+  const [onboardingVisible, setOnboardingVisible] = useState(false)
+
+  useEffect(() => {
+    const show = () => setOnboardingVisible(true)
+    const hide = () => setOnboardingVisible(false)
+    window.addEventListener('onboarding-visible', show)
+    window.addEventListener('onboarding-hidden', hide)
+    return () => {
+      window.removeEventListener('onboarding-visible', show)
+      window.removeEventListener('onboarding-hidden', hide)
+    }
+  }, [])
+
+  const hideChat = pathname && (HIDE_CHAT_PATHS.some((p) => pathname.startsWith(p)) || onboardingVisible)
+  if (hideChat) return null
+
   return (
     <>
-      <div className="fixed top-0 left-0 right-0 z-[9996] flex justify-end pointer-events-none px-2 pt-2 sm:px-4 sm:pt-3" style={{ paddingTop: 'max(0.5rem, env(safe-area-inset-top, 0.5rem))' }}>
-        <div className="pointer-events-auto">
-          <ChatHeaderButton />
-        </div>
-      </div>
+      <ChatFab />
       <ChatWidget />
     </>
   )

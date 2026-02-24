@@ -107,11 +107,11 @@ export function rateLimit(options: RateLimitOptions) {
 }
 
 /**
- * SMS rate limiting (stricter)
+ * SMS rate limiting (verification codes: allow a few retries per window)
  */
 export const smsRateLimit = rateLimit({
   windowMs: 15 * 60 * 1000, // 15 minutes
-  maxRequests: 3, // Max 3 SMS per 15 minutes
+  maxRequests: 8, // Max 8 SMS per 15 min (enough for signup flow + retries)
 })
 
 /**

@@ -6,6 +6,40 @@ const nextConfig = {
         protocol: 'https',
         hostname: 'voca-land.sgp1.cdn.digitaloceanspaces.com',
       },
+      {
+        protocol: 'https',
+        hostname: 'pbs.twimg.com',
+      },
+      {
+        protocol: 'https',
+        hostname: 'media.prefabex.com',
+        pathname: '/**',
+      },
+      {
+        protocol: 'https',
+        hostname: 'www.np-designs.com',
+        pathname: '/**',
+      },
+      {
+        protocol: 'https',
+        hostname: 'm.eyeofriyadh.com',
+        pathname: '/**',
+      },
+      {
+        protocol: 'https',
+        hostname: 'picsum.photos',
+        pathname: '/**',
+      },
+      {
+        protocol: 'https',
+        hostname: 'media.alj.com',
+        pathname: '/**',
+      },
+      {
+        protocol: 'https',
+        hostname: 'encrypted-tbn0.gstatic.com',
+        pathname: '/**',
+      },
     ],
   },
   // Security headers
@@ -42,23 +76,7 @@ const nextConfig = {
             key: 'Permissions-Policy',
             value: 'camera=(), microphone=(self), geolocation=()'
           },
-          {
-            key: 'Content-Security-Policy',
-            value: [
-              "default-src 'self'",
-              "script-src 'self' 'unsafe-eval' 'unsafe-inline'",
-              "style-src 'self' 'unsafe-inline'",
-              "img-src 'self' data: https:",
-              "font-src 'self' data:",
-              "connect-src 'self' https://*.supabase.co https://api.openai.com https://*.infobip.com https://www.winsmspro.com",
-              "frame-src 'self'",
-              "object-src 'none'",
-              "base-uri 'self'",
-              "form-action 'self'",
-              "frame-ancestors 'self'",
-              "upgrade-insecure-requests",
-            ].join('; ')
-          }
+          // CSP is set in middleware.ts so frame-src includes YouTube embeds (landing video)
         ],
       },
     ]

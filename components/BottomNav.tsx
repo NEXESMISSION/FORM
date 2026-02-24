@@ -6,9 +6,9 @@ import { usePathname, useSearchParams } from 'next/navigation'
 import { Home, FolderOpen, User } from 'lucide-react'
 
 const navItems = [
-  { href: '/dashboard/applicant', label: 'الرئيسية', icon: Home, match: (p: string, q: URLSearchParams) => p?.startsWith('/dashboard/applicant') && q.get('form') !== '1' && q.get('tab') !== 'profile' },
+  { href: '/dashboard', label: 'الرئيسية', icon: Home, match: (p: string, q: URLSearchParams) => (p === '/dashboard' || p?.startsWith('/dashboard?')) && q.get('form') !== '1' && q.get('tab') !== 'profile' },
   { href: '/projects', label: 'المشاريع', icon: FolderOpen, match: (p: string) => p?.startsWith('/projects') ?? false },
-  { href: '/dashboard/applicant?tab=profile', label: 'الملف', icon: User, match: (p: string, q: URLSearchParams) => p === '/dashboard/applicant' && q.get('tab') === 'profile' },
+  { href: '/dashboard?tab=profile', label: 'الملف', icon: User, match: (p: string, q: URLSearchParams) => p === '/dashboard' && q.get('tab') === 'profile' },
 ]
 
 // Error boundary for BottomNav to prevent useContext errors

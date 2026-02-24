@@ -201,8 +201,70 @@ export default function HousingApplicationForm() {
     setFormData(prev => ({ ...prev, [field]: value }))
   }
 
-  // Comprehensive validation function
-  const validateForm = (): { isValid: boolean; section: number; field: string; message: string } => {
+  type ValidationResult = { isValid: boolean; section: number; field: string; message: string }
+
+  const validateSection = (section: number): ValidationResult => {
+    if (section === 1) {
+      if (!(formData.full_name || '').trim()) return { isValid: false, section: 1, field: 'full_name', message: 'يرجى إدخال الاسم واللقب' }
+      if (!(formData.current_address || '').trim()) return { isValid: false, section: 1, field: 'current_address', message: 'يرجى اختيار الولاية' }
+      if (!(formData.national_id || '').trim()) return { isValid: false, section: 1, field: 'national_id', message: 'يرجى إدخال رقم بطاقة التعريف الوطنية' }
+      if (!formData.date_of_birth) return { isValid: false, section: 1, field: 'date_of_birth', message: 'يرجى إدخال تاريخ الولادة' }
+      if (!formData.marital_status) return { isValid: false, section: 1, field: 'marital_status', message: 'يرجى اختيار الحالة الاجتماعية' }
+      const isMarriedOrDivorced = formData.marital_status === 'متزوج' || formData.marital_status === 'مطلق'
+      if (isMarriedOrDivorced) {
+        const fc = formData.family_count
+        if (fc === undefined || fc === null || Number.isNaN(Number(fc)) || Number(fc) < 1) return { isValid: false, section: 1, field: 'family_count', message: 'يرجى إدخال عدد أفراد العائلة (1 أو أكثر)' }
+      }
+      if (!(formData.phone || '').trim()) return { isValid: false, section: 1, field: 'phone', message: 'يرجى إدخال رقم الهاتف' }
+      return { isValid: true, section: 0, field: '', message: '' }
+    }
+    if (section === 2) {
+      if (!formData.employment_status) return { isValid: false, section: 2, field: 'employment_status', message: 'يرجى اختيار الوضعية المهنية' }
+      if (!formData.work_sector) return { isValid: false, section: 2, field: 'work_sector', message: 'يرجى اختيار قطاع العمل' }
+      if (formData.net_monthly_income === undefined || formData.net_monthly_income === null) return { isValid: false, section: 2, field: 'net_monthly_income', message: 'يرجى إدخال الدخل الشهري الصافي' }
+      if (!formData.income_stable) return { isValid: false, section: 2, field: 'income_stable', message: 'يرجى الإجابة عن سؤال استقرار الدخل' }
+      return { isValid: true, section: 0, field: '', message: '' }
+    }
+    if (section === 3) {
+      if (!formData.has_financial_obligations) return { isValid: false, section: 3, field: 'has_financial_obligations', message: 'يرجى الإجابة عن سؤال الالتزامات المالية' }
+      if (formData.has_financial_obligations === 'نعم') {
+        if (formData.total_monthly_obligations === undefined || formData.total_monthly_obligations === null || formData.total_monthly_obligations < 0) return { isValid: false, section: 3, field: 'total_monthly_obligations', message: 'يرجى إدخال قيمة الالتزامات الشهرية' }
+      }
+      if (formData.max_monthly_payment === undefined || formData.max_monthly_payment === null) return { isValid: false, section: 3, field: 'max_monthly_payment', message: 'يرجى إدخال القدرة القصوى على الدفع الشهري' }
+      if (!formData.can_save_20_percent) return { isValid: false, section: 3, field: 'can_save_20_percent', message: 'يرجى الإجابة عن سؤال التسبقة' }
+      return { isValid: true, section: 0, field: '', message: '' }
+    }
+    if (section === 4) {
+      if (!formData.current_housing_type) return { isValid: false, section: 4, field: 'current_housing_type', message: 'يرجى اختيار نوع السكن الحالي' }
+      return { isValid: true, section: 0, field: '', message: '' }
+    }
+    if (section === 5) {
+      if (!formData.owns_land) return { isValid: false, section: 5, field: 'owns_land', message: 'يرجى الإجابة عن سؤال ملكية الأرض' }
+      if (formData.owns_land === 'نعم') {
+        if (!(formData.land_location || '').trim()) return { isValid: false, section: 5, field: 'land_location', message: 'يرجى إدخال موقع الأرض' }
+        if (formData.land_area_sqm === undefined || formData.land_area_sqm === null) return { isValid: false, section: 5, field: 'land_area_sqm', message: 'يرجى إدخال مساحة الأرض' }
+        if (!formData.land_nature) return { isValid: false, section: 5, field: 'land_nature', message: 'يرجى اختيار طبيعة الأرض' }
+        if (!formData.land_ownership_type) return { isValid: false, section: 5, field: 'land_ownership_type', message: 'يرجى اختيار نوع الملكية' }
+      }
+      return { isValid: true, section: 0, field: '', message: '' }
+    }
+    if (section === 6) {
+      if (!formData.housing_type_model) return { isValid: false, section: 6, field: 'housing_type_model', message: 'يرجى اختيار نوع السكن' }
+      if (!formData.housing_individual_collective) return { isValid: false, section: 6, field: 'housing_individual_collective', message: 'يرجى اختيار النوع (فردي/جماعي)' }
+      if (!formData.housing_area && !formData.housing_model) return { isValid: false, section: 6, field: 'housing_area', message: 'يرجى اختيار المساحة الجملية المرغوبة' }
+      if (formData.housing_area === 'custom' && (formData.housing_area_custom === undefined || formData.housing_area_custom === null)) return { isValid: false, section: 6, field: 'housing_area_custom', message: 'يرجى إدخال المساحة المخصصة' }
+      return { isValid: true, section: 0, field: '', message: '' }
+    }
+    if (section === 7) {
+      if (!formData.payment_type) return { isValid: false, section: 7, field: 'payment_type', message: 'يرجى اختيار نوع الدفع' }
+      if (formData.payment_type === 'تقسيط' && !formData.installment_period) return { isValid: false, section: 7, field: 'installment_period', message: 'يرجى اختيار مدة التقسيط' }
+      return { isValid: true, section: 0, field: '', message: '' }
+    }
+    if (section >= 8 && section <= 11) return { isValid: true, section: 0, field: '', message: '' }
+    return { isValid: true, section: 0, field: '', message: '' }
+  }
+
+  const validateForm = (): ValidationResult => {
     // Section 1: المعطيات الشخصية
     if (!(formData.full_name || '').trim()) {
       return { isValid: false, section: 1, field: 'full_name', message: 'يرجى إدخال الاسم واللقب' }
@@ -219,8 +281,12 @@ export default function HousingApplicationForm() {
     if (!formData.marital_status) {
       return { isValid: false, section: 1, field: 'marital_status', message: 'يرجى اختيار الحالة الاجتماعية' }
     }
-    if (formData.family_count === undefined || formData.family_count === null) {
-      return { isValid: false, section: 1, field: 'family_count', message: 'يرجى إدخال عدد أفراد العائلة' }
+    const isMarriedOrDivorced = formData.marital_status === 'متزوج' || formData.marital_status === 'مطلق'
+    if (isMarriedOrDivorced) {
+      const fc = formData.family_count
+      if (fc === undefined || fc === null || Number.isNaN(Number(fc)) || Number(fc) < 1) {
+        return { isValid: false, section: 1, field: 'family_count', message: 'يرجى إدخال عدد أفراد العائلة (1 أو أكثر)' }
+      }
     }
     if (!(formData.phone || '').trim()) {
       return { isValid: false, section: 1, field: 'phone', message: 'يرجى إدخال رقم الهاتف' }
@@ -400,9 +466,14 @@ export default function HousingApplicationForm() {
         email: userEmail,
         phone: formData.phone || null,
         marital_status: (formData.marital_status && maritalMap[formData.marital_status]) ? maritalMap[formData.marital_status] : 'single',
-        number_of_children: formData.family_count ?? 0,
-        family_count: formData.family_count ?? 0,
-        children_ages: formData.children_ages || null,
+        // For أعزب/أرمل: family_count and number_of_children are not shown; send safe defaults so API never errors
+        number_of_children: (formData.marital_status === 'متزوج' || formData.marital_status === 'مطلق')
+          ? Math.max(0, Math.floor(Number(formData.family_count) || 0))
+          : 0,
+        family_count: (formData.marital_status === 'متزوج' || formData.marital_status === 'مطلق')
+          ? Math.max(1, Math.floor(Number(formData.family_count) || 1))
+          : 1,
+        children_ages: (formData.marital_status === 'متزوج' || formData.marital_status === 'مطلق') ? (formData.children_ages || null) : null,
         current_address: formData.current_address || '', // Required field
         governorate: formData.current_address || '', // Also set governorate for compatibility
         net_monthly_income: formData.net_monthly_income ?? null,
@@ -553,7 +624,7 @@ export default function HousingApplicationForm() {
       // Use a small delay to ensure toast is shown, then redirect
       // Use window.location for more reliable redirect
       setTimeout(() => {
-        window.location.href = '/dashboard/applicant'
+        window.location.href = '/dashboard'
       }, 800)
     } catch (error: any) {
       // Error handling is done in the if (error) block above
@@ -565,15 +636,24 @@ export default function HousingApplicationForm() {
   }
 
   const nextSection = () => {
-    const validation = validateForm()
-    if (!validation.isValid) {
-      setCurrentSection(validation.section)
-      toast.error(validation.message)
-      focusField(validation.field, validation.section)
-      return
+    if (currentSection < TOTAL_SECTIONS) {
+      const validation = validateSection(currentSection)
+      if (!validation.isValid) {
+        toast.error(validation.message)
+        focusField(validation.field, currentSection)
+        return
+      }
+      setCurrentSection(currentSection + 1)
+    } else {
+      const validation = validateForm()
+      if (!validation.isValid) {
+        setCurrentSection(validation.section)
+        toast.error(validation.message)
+        focusField(validation.field, validation.section)
+        return
+      }
+      handleSubmit()
     }
-    if (currentSection < TOTAL_SECTIONS) setCurrentSection(currentSection + 1)
-    else handleSubmit()
   }
 
   const prevSection = () => {
@@ -676,7 +756,14 @@ export default function HousingApplicationForm() {
                 <select 
                   ref={(el) => { fieldRefs.current['marital_status'] = el }}
                   value={formData.marital_status || ''} 
-                  onChange={(e) => updateFormData('marital_status', e.target.value)} 
+                  onChange={(e) => {
+                    const v = e.target.value
+                    setFormData(prev => ({
+                      ...prev,
+                      marital_status: v,
+                      ...(v === 'أعزب' || v === 'أرمل' ? { family_count: 1, children_ages: '' } : {}),
+                    }))
+                  }}
                   className="form-input"
                 >
                   <option value="">اختر...</option>
@@ -686,21 +773,25 @@ export default function HousingApplicationForm() {
                   <option value="أرمل">أرمل</option>
                 </select>
               </div>
-              <div>
-                <label className="form-label form-label-required">عدد أفراد العائلة</label>
-                <input 
-                  ref={(el) => { fieldRefs.current['family_count'] = el }}
-                  type="number" 
-                  min={0} 
-                  value={formData.family_count ?? ''} 
-                  onChange={(e) => updateFormData('family_count', e.target.value === '' ? undefined : parseInt(e.target.value, 10))} 
-                  className="form-input" 
-                />
-              </div>
-              <div>
-                <label className="form-label form-label-optional">أعمار الأطفال (إن وجدوا)</label>
-                <input type="text" value={formData.children_ages || ''} onChange={(e) => updateFormData('children_ages', e.target.value)} className="form-input" placeholder="مثال: 5، 8، 12" />
-              </div>
+              {(formData.marital_status === 'متزوج' || formData.marital_status === 'مطلق') && (
+                <>
+                  <div>
+                    <label className="form-label form-label-required">عدد أفراد العائلة</label>
+                    <input 
+                      ref={(el) => { fieldRefs.current['family_count'] = el }}
+                      type="number" 
+                      min={0} 
+                      value={formData.family_count ?? ''} 
+                      onChange={(e) => updateFormData('family_count', e.target.value === '' ? undefined : parseInt(e.target.value, 10))} 
+                      className="form-input" 
+                    />
+                  </div>
+                  <div>
+                    <label className="form-label form-label-optional">أعمار الأطفال (إن وجدوا)</label>
+                    <input type="text" value={formData.children_ages || ''} onChange={(e) => updateFormData('children_ages', e.target.value)} className="form-input" placeholder="مثال: 5، 8، 12" />
+                  </div>
+                </>
+              )}
               <div>
                 <label className="form-label form-label-required">رقم الهاتف</label>
                 <input 
@@ -1176,7 +1267,7 @@ export default function HousingApplicationForm() {
               >
                 <option value="">اختر...</option>
                 <option value="شقة">شقة</option>
-                <option value="مسكن فردي متقل">مسكن فردي متقل</option>
+                <option value="مسكن فردي مستقل">مسكن فردي مستقل</option>
                 <option value="مسكن فردي قابل للتوسعة">مسكن فردي قابل للتوسعة</option>
                 <option value="مسكن فردي جماعي">مسكن فردي جماعي</option>
                 <option value="فيلا">فيلا</option>
@@ -1722,34 +1813,25 @@ export default function HousingApplicationForm() {
                                 setRecordingTime(time)
                               }, 1000)
                             } catch (error: any) {
-                              console.error('Microphone access error:', error)
                               setIsRecording(false)
-                              
-                              // Better error messages with helpful instructions
+                              // Log only in development and avoid noisy console for known permission denial
+                              if (error.name !== 'NotAllowedError' && error.name !== 'PermissionDeniedError') {
+                                console.error('Microphone access error:', error)
+                              }
+
                               const errorMessage = error.message || ''
-                              const isSystemDenied = errorMessage.includes('by system') || errorMessage.includes('Permission denied by system')
-                              
+
                               if (error.name === 'NotAllowedError' || error.name === 'PermissionDeniedError') {
-                                if (isSystemDenied) {
-                                  toast.error(
-                                    'تم رفض الوصول إلى الميكروفون من قبل النظام.\n\n' +
-                                    'لتفعيله:\n' +
-                                    '1. افتح إعدادات Windows → الخصوصية → الميكروفون\n' +
-                                    '2. فعّل "السماح للتطبيقات بالوصول إلى الميكروفون"\n' +
-                                    '3. فعّل "السماح للتطبيقات المكتبية بالوصول إلى الميكروفون"\n' +
-                                    '4. أعد تحميل الصفحة وحاول مرة أخرى',
-                                    { duration: 8000 }
-                                  )
-                                } else {
-                                  toast.error(
-                                    'تم رفض الوصول إلى الميكروفون.\n\n' +
-                                    'لتفعيله:\n' +
-                                    '1. انقر على أيقونة القفل 🔒 بجانب عنوان الموقع\n' +
-                                    '2. اختر "السماح" للميكروفون\n' +
-                                    '3. أعد المحاولة',
-                                    { duration: 6000 }
-                                  )
-                                }
+                                // Single message for all denial cases: browser and Windows often report the same way
+                                toast.error(
+                                  'تم رفض الوصول إلى الميكروفون.\n\n' +
+                                  'إذا ظهرت نافذة المتصفح: اختر "السماح".\n\n' +
+                                  'إذا سمحت ولا يزال الخطأ يظهر:\n' +
+                                  '1. انقر أيقونة القفل 🔒 بجانب عنوان الموقع → تأكد أن الميكروفون "مسموح"\n' +
+                                  '2. في Windows: إعدادات → الخصوصية → الميكروفون → فعّل السماح للتطبيقات والتطبيقات المكتبية\n' +
+                                  '3. أعد تحميل الصفحة (F5) ثم اضغط تسجيل مرة أخرى',
+                                  { duration: 10000 }
+                                )
                               } else if (error.name === 'NotFoundError' || error.name === 'DevicesNotFoundError') {
                                 toast.error('لم يتم العثور على ميكروفون. تأكد من توصيله وإعادة تحميل الصفحة.', { duration: 5000 })
                               } else if (error.name === 'NotReadableError' || error.name === 'TrackStartError') {
@@ -1757,10 +1839,8 @@ export default function HousingApplicationForm() {
                               } else if (error.name === 'OverconstrainedError' || error.name === 'ConstraintNotSatisfiedError') {
                                 toast.error('الميكروفون لا يدعم الإعدادات المطلوبة. جرّب متصفحاً آخر.', { duration: 5000 })
                               } else {
-                                const baseMessage = isSystemDenied 
-                                  ? 'تم رفض الوصول من قبل النظام. تحقق من إعدادات Windows للميكروفون.'
-                                  : 'فشل الوصول إلى الميكروفون: ' + (error.message || 'خطأ غير معروف')
-                                toast.error(baseMessage + '\n\nتأكد من تفعيل الصلاحيات من إعدادات المتصفح والنظام.', { duration: 6000 })
+                                const baseMessage = 'فشل الوصول إلى الميكروفون: ' + (error.message || errorMessage || 'خطأ غير معروف')
+                                toast.error(baseMessage + '\n\nتأكد من تفعيل صلاحية الميكروفون في المتصفح وإعدادات Windows ثم أعد تحميل الصفحة.', { duration: 6000 })
                               }
                             }
                           }
@@ -1791,7 +1871,6 @@ export default function HousingApplicationForm() {
             <p className="text-gray-600">في حال الترشح لبرنامج السكن الاجتماعي أو السكن المدعّم، يرجى تحميل الوثائق التالية عبر التطبيق:</p>
             <ul className="list-disc list-inside space-y-2 text-gray-700">
               <li>نسخة من بطاقة التعريف الوطنية</li>
-              <li>شهادة دخل أو شهادة عدم دخل</li>
               <li>شهادة في الوضعية العائلية</li>
               <li>شهادة تسجيل لدى الشؤون الاجتماعية (إن وجدت)</li>
               <li>شهادة طبية أو بطاقة إعاقة (عند الاقتضاء)</li>

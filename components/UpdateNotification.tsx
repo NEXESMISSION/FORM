@@ -16,7 +16,7 @@ function isRealBuildId(id: string | null): boolean {
 function isFormOrSensitivePage(pathname: string | null, formParam: string | null): boolean {
   if (!pathname) return false
   if (pathname.startsWith('/auth/register') || pathname.startsWith('/auth/login')) return true
-  if (pathname.startsWith('/dashboard/applicant') && formParam === '1') return true
+  if ((pathname === '/dashboard' || pathname.startsWith('/dashboard/applicant')) && formParam === '1') return true
   return false
 }
 

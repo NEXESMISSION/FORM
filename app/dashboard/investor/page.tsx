@@ -6,7 +6,7 @@ import { useRouter } from 'next/navigation'
 export default function InvestorRedirectPage() {
   const router = useRouter()
   useEffect(() => {
-    router.replace('/dashboard/applicant')
+    router.replace('/dashboard')
   }, [router])
   return (
     <div className="min-h-screen flex items-center justify-center">

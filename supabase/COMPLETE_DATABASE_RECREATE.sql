@@ -1,8 +1,14 @@
 -- ============================================================
 -- إعادة إنشاء قاعدة البيانات بالكامل - البنية الجديدة الكاملة
 -- Domobat / برنامج السكن الاقتصادي السريع
--- 
--- ⚠️ تحذير: هذا الملف سيحذف جميع البيانات والجداول الموجودة!
+--
+-- ⛔ خطر: هذا الملف يحذف كل الجداول ثم يعيد إنشائها فارغة.
+-- ⛔ استخدمه فقط على مشروع جديد أو بيئة تطوير فارغة.
+-- ⛔ لا تشغّله أبداً على قاعدة فيها مستخدمين أو طلبات حقيقية!
+--
+-- إذا كنت تريد فقط إضافة أعمدة أو جداول جديدة دون حذف البيانات،
+-- استخدم بدلاً منه: APPLY_SCHEMA_CHANGES_SAFE.sql
+--
 -- نفّذ هذا الملف في Supabase SQL Editor
 -- ============================================================
 
@@ -46,6 +52,8 @@ DROP POLICY IF EXISTS "Admins can view all direct purchases" ON public.project_d
 DROP POLICY IF EXISTS "Admins can update direct purchases" ON public.project_direct_purchases;
 DROP POLICY IF EXISTS "Anyone can read active required document types" ON public.required_document_types;
 DROP POLICY IF EXISTS "Admins can manage required document types" ON public.required_document_types;
+DROP POLICY IF EXISTS "Anyone can read progress stages" ON public.progress_stages;
+DROP POLICY IF EXISTS "Admins can manage progress stages" ON public.progress_stages;
 
 -- حذف الجداول (بالترتيب الصحيح بسبب الـ foreign keys)
 DROP TABLE IF EXISTS public.investment_returns CASCADE;
@@ -53,6 +61,7 @@ DROP TABLE IF EXISTS public.investments CASCADE;
 DROP TABLE IF EXISTS public.project_direct_purchases CASCADE;
 DROP TABLE IF EXISTS public.housing_applications CASCADE;
 DROP TABLE IF EXISTS public.projects CASCADE;
+DROP TABLE IF EXISTS public.progress_stages CASCADE;
 DROP TABLE IF EXISTS public.required_document_types CASCADE;
 DROP TABLE IF EXISTS public.profiles CASCADE;
 
@@ -108,6 +117,7 @@ CREATE TABLE public.profiles (
   country TEXT DEFAULT 'Tunisia',
   city TEXT,
   governorate TEXT,
+  has_seen_intro BOOLEAN DEFAULT false,
   created_at TIMESTAMP WITH TIME ZONE DEFAULT TIMEZONE('utc', NOW()) NOT NULL,
   updated_at TIMESTAMP WITH TIME ZONE DEFAULT TIMEZONE('utc', NOW()) NOT NULL
 );
@@ -221,6 +231,12 @@ CREATE TABLE public.housing_applications (
   reviewed_at TIMESTAMP WITH TIME ZONE,
   reviewed_by UUID REFERENCES public.profiles(id),
   
+  progress_stage TEXT,
+  progress_percentage INTEGER DEFAULT 0 CHECK (progress_percentage >= 0 AND progress_percentage <= 100),
+  progress_notes TEXT,
+  progress_updated_at TIMESTAMP WITH TIME ZONE,
+  custom_progress_stages JSONB DEFAULT NULL,
+
   created_at TIMESTAMP WITH TIME ZONE DEFAULT TIMEZONE('utc', NOW()) NOT NULL,
   updated_at TIMESTAMP WITH TIME ZONE DEFAULT TIMEZONE('utc', NOW()) NOT NULL
 );
@@ -255,7 +271,8 @@ CREATE TABLE public.projects (
   -- حقول طلب الشراء المباشر
   purchase_form_fields JSONB DEFAULT '["full_name","phone","cin","email","notes"]'::jsonb,
   purchase_required_documents JSONB DEFAULT '["نسخة بطاقة التعريف","شهادة دخل أو عدم دخل"]'::jsonb,
-  
+  custom_progress_stages JSONB DEFAULT NULL,
+
   created_by UUID REFERENCES public.profiles(id),
   created_at TIMESTAMP WITH TIME ZONE DEFAULT TIMEZONE('utc', NOW()) NOT NULL,
   updated_at TIMESTAMP WITH TIME ZONE DEFAULT TIMEZONE('utc', NOW()) NOT NULL
@@ -271,9 +288,23 @@ CREATE TABLE public.project_direct_purchases (
   documents_note TEXT,
   documents JSONB DEFAULT '[]'::jsonb,
   admin_notes TEXT,
+  progress_stage TEXT,
+  progress_percentage INTEGER DEFAULT 0 CHECK (progress_percentage >= 0 AND progress_percentage <= 100),
+  progress_notes TEXT,
+  progress_updated_at TIMESTAMP WITH TIME ZONE,
   created_at TIMESTAMP WITH TIME ZONE DEFAULT TIMEZONE('utc', NOW()) NOT NULL,
   updated_at TIMESTAMP WITH TIME ZONE DEFAULT TIMEZONE('utc', NOW()) NOT NULL,
   UNIQUE(user_id, project_id)
+);
+
+-- جدول progress_stages (مراحل التقدم: قياسية + مخصصة)
+CREATE TABLE public.progress_stages (
+  id UUID DEFAULT uuid_generate_v4() PRIMARY KEY,
+  value TEXT UNIQUE,
+  label_ar TEXT NOT NULL,
+  sort_order INTEGER DEFAULT 0 NOT NULL,
+  is_system BOOLEAN DEFAULT false NOT NULL,
+  created_at TIMESTAMP WITH TIME ZONE DEFAULT TIMEZONE('utc', NOW()) NOT NULL
 );
 
 -- جدول investments (الاستثمارات)
@@ -320,6 +351,7 @@ ALTER TABLE public.project_direct_purchases ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.investments ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.investment_returns ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.required_document_types ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.progress_stages ENABLE ROW LEVEL SECURITY;
 
 -- ============================================================
 -- الخطوة 5: إنشاء الـ Functions
@@ -516,6 +548,15 @@ CREATE POLICY "Admins can manage required document types"
   USING (check_is_admin())
   WITH CHECK (check_is_admin());
 
+CREATE POLICY "Anyone can read progress stages"
+  ON public.progress_stages FOR SELECT
+  USING (true);
+
+CREATE POLICY "Admins can manage progress stages"
+  ON public.progress_stages FOR ALL
+  USING (check_is_admin())
+  WITH CHECK (check_is_admin());
+
 -- ============================================================
 -- الخطوة 8: إدراج البيانات الافتراضية
 -- ============================================================
@@ -523,11 +564,18 @@ CREATE POLICY "Admins can manage required document types"
 -- إدراج قائمة المستندات المطلوبة الافتراضية
 INSERT INTO public.required_document_types (label_ar, sort_order, active) VALUES
   ('نسخة بطاقة التعريف الوطنية', 1, true),
-  ('شهادة دخل أو شهادة عدم دخل', 2, true),
-  ('شهادة الإقامة أو عقد الكراء', 3, true),
-  ('شهادة العمل أو عقد الشغل', 4, true),
-  ('كشف حساب بنكي (آخر 3 أشهر)', 5, true)
+  ('شهادة الإقامة أو عقد الكراء', 2, true),
+  ('شهادة العمل أو عقد الشغل', 3, true),
+  ('كشف حساب بنكي (آخر 3 أشهر)', 4, true)
 ON CONFLICT DO NOTHING;
+
+INSERT INTO public.progress_stages (value, label_ar, sort_order, is_system) VALUES
+  ('study', 'دراسة المشروع', 1, true),
+  ('design', 'التصميم', 2, true),
+  ('construction', 'البناء', 3, true),
+  ('finishing', 'التشطيب', 4, true),
+  ('ready', 'جاهز للتسليم', 5, true)
+ON CONFLICT (value) DO NOTHING;
 
 -- ============================================================
 -- ✅ اكتمل إعادة إنشاء قاعدة البيانات

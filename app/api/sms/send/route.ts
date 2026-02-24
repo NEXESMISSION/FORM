@@ -22,23 +22,27 @@ function formatTunisianPhone(phone: string): string {
 }
 
 export const POST = async (request: NextRequest) => {
-  const rateLimitResult = await smsRateLimit(request)
-  if (!rateLimitResult.allowed) {
-    return NextResponse.json(
-      {
-        error: 'Too many requests. Please try again later.',
-        retryAfter: rateLimitResult.retryAfter,
-      },
-      {
-        status: 429,
-        headers: {
-          'Retry-After': String(rateLimitResult.retryAfter || 900),
-          'X-RateLimit-Limit': '3',
-          'X-RateLimit-Remaining': String(rateLimitResult.remaining),
-          'X-RateLimit-Reset': String(rateLimitResult.resetTime),
+  // In development, skip rate limit so you can test signup flow without waiting
+  const isDev = process.env.NODE_ENV === 'development'
+  if (!isDev) {
+    const rateLimitResult = await smsRateLimit(request)
+    if (!rateLimitResult.allowed) {
+      return NextResponse.json(
+        {
+          error: 'Too many requests. Please try again later.',
+          retryAfter: rateLimitResult.retryAfter,
         },
-      }
-    )
+        {
+          status: 429,
+          headers: {
+            'Retry-After': String(rateLimitResult.retryAfter || 900),
+            'X-RateLimit-Limit': '8',
+            'X-RateLimit-Remaining': String(rateLimitResult.remaining),
+            'X-RateLimit-Reset': String(rateLimitResult.resetTime),
+          },
+        }
+      )
+    }
   }
 
   if (!process.env.WINSMS_API_KEY) {

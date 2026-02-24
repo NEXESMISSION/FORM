@@ -37,10 +37,9 @@ BEGIN
   IF NOT EXISTS (SELECT 1 FROM public.required_document_types LIMIT 1) THEN
     INSERT INTO public.required_document_types (label_ar, sort_order, active) VALUES
       ('نسخة بطاقة التعريف الوطنية', 1, true),
-      ('شهادة دخل أو شهادة عدم دخل', 2, true),
-      ('شهادة الإقامة أو عقد الكراء', 3, true),
-      ('شهادة العمل أو عقد الشغل', 4, true),
-      ('كشف حساب بنكي (آخر 3 أشهر)', 5, true);
+      ('شهادة الإقامة أو عقد الكراء', 2, true),
+      ('شهادة العمل أو عقد الشغل', 3, true),
+      ('كشف حساب بنكي (آخر 3 أشهر)', 4, true);
   END IF;
 END $$;
 

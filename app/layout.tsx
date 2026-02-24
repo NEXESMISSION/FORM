@@ -1,7 +1,7 @@
 import type { Metadata } from 'next'
-import { Suspense } from 'react'
 import './globals.css'
 import { Toaster } from 'react-hot-toast'
+import ClientOnlyAfterMount from '@/components/ClientOnlyAfterMount'
 import ClientOnlyLayoutExtras from '@/components/ClientOnlyLayoutExtras'
 import ChatWrapper from '@/components/ChatWrapper'
 import { SITE_URL, SEO_DEFAULTS, absoluteUrl } from '@/lib/seo'
@@ -144,11 +144,11 @@ export default function RootLayout({
         />
       </head>
       <body className="antialiased">
-        <Suspense fallback={null}>
-          <ClientOnlyLayoutExtras />
-        </Suspense>
         {children}
-        <ChatWrapper />
+        <ClientOnlyAfterMount>
+          <ClientOnlyLayoutExtras />
+          <ChatWrapper />
+        </ClientOnlyAfterMount>
         <Toaster
           position="top-center"
           toastOptions={{
