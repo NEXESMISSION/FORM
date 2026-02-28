@@ -23,57 +23,10 @@ const STATUS_LABELS: Record<string, string> = {
 const PURCHASE_STATUS_LABELS: Record<string, string> = {
   pending: 'قيد المراجعة',
   in_progress: 'قيد المتابعة',
+  documents_requested: 'مطلوب إرفاق مستندات',
+  documents_rejected: 'مستندات مرفوضة — يرجى الاستبدال',
   approved: 'مقبول',
   rejected: 'مرفوض',
-}
-
-// Mock data for test-mode fake application
-function buildMockApplicationPayload(userId: string): Record<string, unknown> {
-  const firstNames = ['أحمد', 'محمد', 'فاطمة', 'علي', 'سارة', 'يوسف', 'نور', 'خالد']
-  const lastNames = ['بن صالح', 'المنصوري', 'الجلاصي', 'الهمامي', 'الزيتوني', 'بن ناصر', 'الشابي', 'المرزوقي']
-  const governorates = ['تونس', 'صفاقس', 'سوسة', 'نابل', 'بن عروس', 'أريانة', 'القيروان', 'القصرين']
-  const f = firstNames[Math.floor(Math.random() * firstNames.length)]
-  const l = lastNames[Math.floor(Math.random() * lastNames.length)]
-  const gov = governorates[Math.floor(Math.random() * governorates.length)]
-  const year = 1985 + Math.floor(Math.random() * 25)
-  const month = String(1 + Math.floor(Math.random() * 12)).padStart(2, '0')
-  const day = String(1 + Math.floor(Math.random() * 28)).padStart(2, '0')
-  const area = [60, 80, 100, 120][Math.floor(Math.random() * 4)]
-  const income = 600 + Math.floor(Math.random() * 1400)
-  const period = ['5', '10', '15', '20', '25'][Math.floor(Math.random() * 5)]
-  return {
-    user_id: userId,
-    status: 'in_progress',
-    first_name: f,
-    last_name: l,
-    national_id: `0${Math.floor(10000000 + Math.random() * 89999999)}`,
-    date_of_birth: `${year}-${month}-${day}`,
-    email: `test.${Date.now()}@example.com`,
-    governorate: gov,
-    current_address: gov,
-    desired_housing_type: 'apartment',
-    maximum_budget: 400 + Math.floor(Math.random() * 600),
-    required_area: area,
-    marital_status: ['single', 'married', 'divorced', 'widowed'][Math.floor(Math.random() * 4)],
-    number_of_children: Math.floor(Math.random() * 5),
-    net_monthly_income: income,
-    total_monthly_obligations: Math.floor(income * 0.2),
-    skills: 'اختبار، محاسبة، إعلام آلي',
-    housing_type_model: Math.random() > 0.5 ? 'APARTMENT' : 'VILLA',
-    housing_individual_collective: Math.random() > 0.5 ? 'فردي' : 'جماعي',
-    housing_area: String(area),
-    housing_area_custom: null,
-    desired_total_area: `${area} م²`,
-    number_of_rooms: String(2 + Math.floor(Math.random() * 3)),
-    additional_components: [],
-    housing_purpose: 'سكن عائلي',
-    payment_type: 'تقسيط',
-    payment_percentage: 20 + Math.floor(Math.random() * 30),
-    installment_period: period,
-    additional_info: 'طلب تجريبي (Test)',
-    additional_info_type: 'نص',
-    additional_info_voice_url: null,
-  }
 }
 
 // Client-only URL params to avoid useSearchParams() running before navigation context is ready (fixes 500/useContext null)
@@ -109,7 +62,6 @@ export function ApplicantDashboardContent() {
   const [uploadingForId, setUploadingForId] = useState<string | null>(null)
   const [uploadingFiles, setUploadingFiles] = useState(false)
   const [pendingListFiles, setPendingListFiles] = useState<{ appId: string; files: File[] } | null>(null)
-  const [sendingTest, setSendingTest] = useState(false)
   const [showIntro, setShowIntro] = useState<boolean | null>(null)
   const [showAlertsPopup, setShowAlertsPopup] = useState(false)
 
@@ -268,32 +220,7 @@ export function ApplicantDashboardContent() {
     setShowForm(false)
     loadApplications()
     loadDirectPurchases()
-    router.replace('/dashboard/applicant')
-  }
-
-  const sendFakeApplication = async () => {
-    if (!user || sendingTest) return
-    setSendingTest(true)
-    try {
-      const payload = buildMockApplicationPayload(user.id)
-      const { data: inserted, error } = await supabase
-        .from('housing_applications')
-        .insert(payload)
-        .select()
-        .single()
-      if (error) throw error
-      if (inserted?.id) {
-        try {
-          await supabase.rpc('calculate_application_score', { app_id: inserted.id })
-        } catch (_) {}
-      }
-      toast.success('تم إرسال طلب تجريبي')
-      loadApplications()
-    } catch (e: any) {
-      toast.error(e?.message || 'فشل إرسال الطلب التجريبي')
-    } finally {
-      setSendingTest(false)
-    }
+    router.replace('/dashboard?view=requests')
   }
 
   const uploadHousingDocs = async (appId: string, files: FileList | File[] | null): Promise<boolean> => {
@@ -351,7 +278,11 @@ export function ApplicantDashboardContent() {
     return (
       <IntroOnboarding
         userName={firstName}
-        onDone={() => setShowIntro(false)}
+        onDone={() => {
+          setShowIntro(false)
+          if (typeof window !== 'undefined') window.sessionStorage.setItem('domobat_show_welcome', '1')
+          router.replace('/projects')
+        }}
       />
     )
   }
@@ -378,65 +309,88 @@ export function ApplicantDashboardContent() {
   }
 
   if (isProfileTab) {
+    const email = user?.email ?? profile?.email ?? ''
+    const showEmail = email && typeof email === 'string' && !email.endsWith('@domobat.user')
     return (
-      <div className="min-h-screen bg-surface flex flex-col pb-32">
-        <header className="sticky top-0 z-10 bg-white border-b border-gray-100">
-          <div className="max-w-[28rem] mx-auto px-4 h-14 flex items-center">
-            <span className="text-lg font-semibold text-gray-900">الملف الشخصي</span>
+      <div className="min-h-screen bg-gold-50 flex flex-col pb-32" dir="rtl">
+        {/* Header — نفس أسلوب الصفحة الرئيسية */}
+        <header className="sticky top-0 z-10 bg-gold-50/95 border-b-2 border-gold-300 safe-top">
+          <div className="max-w-[28rem] mx-auto px-4 min-h-[4rem] flex items-center justify-end">
+            <h1 className="text-lg font-bold text-gold-950 text-right">الملف الشخصي</h1>
           </div>
         </header>
-        <main className="max-w-[28rem] mx-auto w-full px-4 pt-6 flex-1">
-          <div className="card mb-4">
-            <p className="text-xs font-medium text-gray-500 mb-3">المعلومات الشخصية</p>
-            <div className="space-y-3">
-              <div>
-                <p className="text-xs text-gray-500">الاسم</p>
-                <p className="font-medium text-gray-900">{profile?.name || user?.user_metadata?.full_name || '—'}</p>
+
+        <main className="max-w-[28rem] mx-auto w-full px-4 pt-6 pb-6 flex-1 text-right">
+          {/* بطاقة المعلومات الشخصية — ستايل لاندينغ */}
+          <section className="mb-5">
+            <div className="bg-white rounded-2xl border-2 border-gold-200 shadow-md overflow-hidden">
+              <div className="bg-gradient-to-b from-gold-100 to-gold-50 border-b-2 border-gold-200 px-5 py-3">
+                <p className="text-sm font-semibold text-gold-900">المعلومات الشخصية</p>
               </div>
-              <div>
-                <p className="text-xs text-gray-500">البريد الإلكتروني</p>
-                <p className="font-medium text-gray-900">{user?.email ?? profile?.email ?? '—'}</p>
+              <dl className="p-5 space-y-4">
+                <div className="flex justify-between items-baseline gap-3 flex-row-reverse">
+                  <dt className="text-xs font-medium text-gold-600 shrink-0">الاسم</dt>
+                  <dd className="text-sm text-gold-950 font-semibold truncate text-right min-w-0">{profile?.name || user?.user_metadata?.full_name || '—'}</dd>
+                </div>
+                {showEmail && (
+                  <div className="flex justify-between items-baseline gap-3 flex-row-reverse">
+                    <dt className="text-xs font-medium text-gold-600 shrink-0">البريد</dt>
+                    <dd className="text-sm text-gold-900 truncate text-right min-w-0">{email || '—'}</dd>
+                  </div>
+                )}
+                <div className="flex justify-between items-baseline gap-3 flex-row-reverse">
+                  <dt className="text-xs font-medium text-gold-600 shrink-0">الهاتف</dt>
+                  <dd className="text-sm text-gold-950 font-semibold truncate text-right min-w-0" dir="ltr">{profile?.phone_number || '—'}</dd>
+                </div>
+                <div className="flex justify-between items-baseline gap-3 flex-row-reverse">
+                  <dt className="text-xs font-medium text-gold-600 shrink-0">الولاية</dt>
+                  <dd className="text-sm text-gold-900 text-right min-w-0">{profile?.governorate || '—'}</dd>
+                </div>
+              </dl>
+            </div>
+          </section>
+
+          {/* ملخص الطلبات — بطاقتان بنفس أسلوب أزرار اللاندينغ */}
+          <section className="mb-5">
+            <p className="text-xs font-medium text-gold-800 mb-2 text-right">ملخص طلباتك</p>
+            <div className="flex gap-3">
+              <div className="flex-1 rounded-2xl border-2 border-gold-300 bg-white shadow-md px-4 py-4 text-right">
+                <p className="text-2xl font-bold text-gold-700">{applications.length}</p>
+                <p className="text-sm text-gold-800 mt-0.5">طلب سكن</p>
               </div>
-              <div>
-                <p className="text-xs text-gray-500">رقم الهاتف</p>
-                <p className="font-medium text-gray-900" dir="ltr">{profile?.phone_number || '—'}</p>
-              </div>
-              <div>
-                <p className="text-xs text-gray-500">الولاية</p>
-                <p className="font-medium text-gray-900">{profile?.governorate || '—'}</p>
+              <div className="flex-1 rounded-2xl border-2 border-gold-300 bg-white shadow-md px-4 py-4 text-right">
+                <p className="text-2xl font-bold text-gold-700">{directPurchases.length}</p>
+                <p className="text-sm text-gold-800 mt-0.5">طلب شراء</p>
               </div>
             </div>
-          </div>
-          <div className="card mb-4">
-            <p className="text-xs font-medium text-gray-500 mb-3">ملخص الطلبات</p>
-            <div className="grid grid-cols-2 gap-3">
-              <div className="rounded-xl bg-gray-50 p-3">
-                <p className="text-lg font-bold text-primary-600">{applications.length}</p>
-                <p className="text-xs text-gray-600">طلب سكن</p>
-              </div>
-              <div className="rounded-xl bg-gray-50 p-3">
-                <p className="text-lg font-bold text-primary-600">{directPurchases.length}</p>
-                <p className="text-xs text-gray-600">طلب شراء</p>
-              </div>
+          </section>
+
+          {/* أزرار التعريف والدعم — أسلوب اللاندينغ */}
+          <section className="space-y-3 mb-5">
+            <button
+              type="button"
+              onClick={async () => { await resetIntro(); setShowIntro(true) }}
+              className="w-full min-h-[2.75rem] py-3.5 rounded-xl bg-gradient-to-b from-gold-400 to-gold-600 text-white text-sm font-medium text-center shadow-md hover:from-gold-500 hover:to-gold-700 hover:shadow-lg active:scale-[0.99] transition-all touch-manipulation"
+            >
+              شاهد التعريف بالمنصة مرة أخرى
+            </button>
+            <div className="rounded-2xl border-2 border-gold-300 bg-gold-50/80 px-5 py-4">
+              <p className="text-sm font-semibold text-gold-900 mb-1.5">للتواصل أو تعديل البيانات</p>
+              <p className="text-xs text-gold-800 mb-2">الدعم الفني</p>
+              <p className="text-sm text-gold-700" dir="ltr">
+                <a href="tel:+21670123456" className="hover:text-gold-900 underline underline-offset-2">+216 70 123 456</a>
+                {' · '}
+                <a href="tel:+21671234567" className="hover:text-gold-900 underline underline-offset-2">+216 71 234 567</a>
+              </p>
             </div>
-          </div>
+          </section>
+
+          {/* تسجيل الخروج — زر ثانوي مثل «تسجيل الدخول» في اللاندينغ */}
           <button
             type="button"
-            onClick={async () => { await resetIntro(); setShowIntro(true) }}
-            className="card mb-4 w-full text-right border border-gray-200 hover:border-primary-300 hover:bg-primary-50/50 transition-colors"
+            onClick={handleLogout}
+            className="w-full min-h-[2.75rem] py-3.5 rounded-xl border-2 border-gold-400 bg-white text-gold-900 text-sm font-medium flex items-center justify-center gap-2 hover:bg-gold-50 hover:border-gold-500 active:scale-[0.99] transition-all touch-manipulation"
           >
-            <p className="text-sm font-medium text-primary-700">شاهد التعريف بالمنصة مرة أخرى</p>
-            <p className="text-xs text-gray-500 mt-1">شرح قصير لما تقدمه دوموبات وكيف تستخدم اللوحة.</p>
-          </button>
-          <div className="card mb-4 bg-primary-50 border-primary-100">
-            <p className="text-sm text-primary-900">للتواصل أو تعديل بياناتك، تواصل مع الدعم الفني.</p>
-            <ul className="mt-3 space-y-1.5 text-sm text-primary-800">
-              <li><a href="tel:+21670123456" className="hover:underline" dir="ltr">+216 70 123 456</a></li>
-              <li><a href="tel:+21671234567" className="hover:underline" dir="ltr">+216 71 234 567</a></li>
-              <li><a href="tel:+21698123456" className="hover:underline" dir="ltr">+216 98 123 456</a></li>
-            </ul>
-          </div>
-          <button type="button" onClick={handleLogout} className="btn-secondary w-full flex items-center justify-center gap-2 text-gray-700 py-3">
             <LogOut className="w-4 h-4" />
             تسجيل الخروج
           </button>
@@ -488,8 +442,22 @@ export function ApplicantDashboardContent() {
     return rejectedDocs.length > 0 || missing || (hasAdminMsg && !isApproved) || isDocsRejected
   })
 
-  type AlertItem = { type: 'missing' | 'admin_request' | 'rejected'; appId: string; date: string; text: string }
+  type AlertItem = { type: 'missing' | 'admin_request' | 'rejected' | 'purchase_docs'; appId?: string; purchaseId?: string; kind: 'application' | 'purchase'; date: string; text: string; title: string }
   const alertsList: AlertItem[] = []
+  directPurchases.forEach(({ purchase, projectName }) => {
+    if (purchase.status === 'documents_requested' || purchase.status === 'documents_rejected') {
+      const msg = (purchase.admin_notes || purchase.documents_note || '').trim()
+      const text = msg ? (msg.length > 80 ? msg.slice(0, 80) + '…' : msg) : 'مطلوب إرفاق أو استبدال مستندات.'
+      alertsList.push({
+        type: 'purchase_docs',
+        purchaseId: purchase.id,
+        kind: 'purchase',
+        date: new Date(purchase.updated_at || purchase.created_at).toLocaleDateString('ar-TN', { dateStyle: 'long' }),
+        text,
+        title: `طلب شراء — ${projectName}`,
+      })
+    }
+  })
   applications.forEach((app: any) => {
     const isApproved = app.status === 'approved'
     const missingLabels = getMissingDocLabelsForApp(app)
@@ -504,12 +472,13 @@ export function ApplicantDashboardContent() {
       alertsList.push({
         type: 'missing',
         appId: app.id,
+        kind: 'application',
         date: dateStr,
         text: `ناقص: ${missingLabels.join('، ')}`,
+        title: 'طلب سكن',
       })
     }
     if (hasAdminMsg && !isApproved) {
-      // Format message - remove doc list header if present
       let displayMsg = adminMessage
       if (adminMessage.includes('المطلوب:')) {
         const parts = adminMessage.split('المطلوب:')
@@ -520,8 +489,10 @@ export function ApplicantDashboardContent() {
       alertsList.push({
         type: 'admin_request',
         appId: app.id,
+        kind: 'application',
         date: dateStr,
-        text: `طلب من الإدارة: ${displayMsg.substring(0, 60)}${displayMsg.length > 60 ? '...' : ''}`,
+        text: displayMsg.length > 60 ? displayMsg.substring(0, 60) + '…' : displayMsg,
+        title: 'طلب سكن',
       })
     }
     if (rejectedDocs.length > 0) {
@@ -529,8 +500,10 @@ export function ApplicantDashboardContent() {
       alertsList.push({
         type: 'rejected',
         appId: app.id,
+        kind: 'application',
         date: dateStr,
         text: `مستندات مرفوضة: ${rejectedText}`,
+        title: 'طلب سكن',
       })
     }
   })
@@ -538,39 +511,8 @@ export function ApplicantDashboardContent() {
   return (
     <div className="min-h-screen bg-surface flex flex-col pb-32">
       <header className="sticky top-0 z-10 bg-white/95 backdrop-blur border-b border-gray-100">
-        <div className="max-w-[28rem] mx-auto px-4 h-20 flex items-center justify-between">
-          <div className="flex items-center min-w-0">
-            <Image src="/logo.png" alt="DOMOBAT" width={112} height={112} className="rounded-2xl shrink-0 w-auto h-auto" priority />
-          </div>
-          <div className="flex items-center gap-2">
-            <button
-              type="button"
-              onClick={() => setShowAlertsPopup(true)}
-              className={`relative flex items-center justify-center w-10 h-10 rounded-xl border transition-colors ${
-                alertsList.length > 0
-                  ? 'bg-amber-100 text-amber-700 border-amber-200 hover:bg-amber-200'
-                  : 'bg-gray-100 text-gray-500 border-gray-200 hover:bg-gray-200'
-              }`}
-              title={alertsList.length > 0 ? `${alertsList.length} تنبيه` : 'عرض التنبيهات'}
-              aria-label="التنبيهات"
-            >
-              <AlertCircle className="w-5 h-5" />
-              {alertsList.length > 0 && (
-                <span className="absolute -top-0.5 -right-0.5 flex h-4 min-w-4 px-1 items-center justify-center rounded-full bg-amber-500 text-[10px] font-bold text-white">
-                  {alertsList.length > 9 ? '9+' : alertsList.length}
-                </span>
-              )}
-            </button>
-            <button
-              type="button"
-              onClick={sendFakeApplication}
-              disabled={sendingTest}
-              className="text-[10px] font-medium text-gray-400 hover:text-gray-600 py-1 px-2 rounded border border-gray-200 hover:border-gray-300"
-              title="إرسال طلب تجريبي"
-            >
-              {sendingTest ? '...' : 'Test'}
-            </button>
-          </div>
+        <div className="max-w-[28rem] mx-auto px-4 min-h-[8rem] flex items-center justify-center py-1.5">
+          <Image src="/logo.png" alt="DOMOBAT" width={200} height={200} className="rounded-2xl shrink-0 w-36 h-36 sm:w-40 sm:h-40 object-contain max-h-[8rem]" priority />
         </div>
       </header>
 
@@ -594,8 +536,7 @@ export function ApplicantDashboardContent() {
             <div className="rounded-2xl border-2 border-dashed border-gray-200 bg-gray-50/50 p-8 text-center">
               <Home className="w-12 h-12 text-gray-300 mx-auto mb-3" />
               <p className="text-gray-600 font-medium mb-1">لا توجد طلبات بعد</p>
-              <p className="text-sm text-gray-500 mb-5">ابدأ باستمارة طلب سكن أو طلب شراء وحدة.</p>
-              <Link href="/dashboard/applicant?form=1" className="inline-block py-3 px-6 rounded-2xl bg-primary-600 text-white font-semibold hover:bg-primary-700 active:scale-[0.98]">بدء استمارة طلب السكن</Link>
+              <p className="text-sm text-gray-500">تحتاج إلى اختيار مشروع أولاً. اذهب إلى المشاريع واختر مشروعاً ثم أرسل طلبك.</p>
             </div>
           ) : (
             <div className="space-y-3">
@@ -906,20 +847,22 @@ export function ApplicantDashboardContent() {
                 const statusLabel = PURCHASE_STATUS_LABELS[purchase.status] || purchase.status
                 const isApproved = purchase.status === 'approved' || purchase.status === 'in_progress'
                 const isRejectedPurchase = purchase.status === 'rejected'
-                const statusColor = purchase.status === 'approved' ? 'bg-green-100 text-green-800 border-green-200' : isRejectedPurchase ? 'bg-red-100 text-red-800 border-red-200' : 'bg-gray-100 text-gray-700 border-gray-200'
-                const purchaseCardBorder = isRejectedPurchase ? 'border border-red-300 border-r-4 border-r-red-500' : isApproved ? 'border border-green-300 border-r-4 border-r-green-500' : 'border border-gray-200'
-                const purchaseCardBg = isRejectedPurchase ? 'bg-red-50/40' : isApproved ? 'bg-green-50/30' : 'bg-white'
-                const purchaseIconBg = isRejectedPurchase ? 'bg-red-100' : isApproved ? 'bg-green-100' : 'bg-primary-50'
-                const purchaseIconColor = isRejectedPurchase ? 'text-red-600' : isApproved ? 'text-green-600' : 'text-primary-600'
+                const isDocsRequested = purchase.status === 'documents_requested' || purchase.status === 'documents_rejected'
+                const statusColor = purchase.status === 'approved' ? 'bg-green-100 text-green-800 border-green-200' : isRejectedPurchase ? 'bg-red-100 text-red-800 border-red-200' : isDocsRequested ? 'bg-amber-100 text-amber-800 border-amber-200' : 'bg-gray-100 text-gray-700 border-gray-200'
+                const purchaseCardBorder = isRejectedPurchase ? 'border border-red-300 border-r-4 border-r-red-500' : isDocsRequested ? 'border border-amber-300 border-r-4 border-r-amber-500' : isApproved ? 'border border-green-300 border-r-4 border-r-green-500' : 'border border-gray-200'
+                const purchaseCardBg = isRejectedPurchase ? 'bg-red-50/40' : isDocsRequested ? 'bg-amber-50/50' : isApproved ? 'bg-green-50/30' : 'bg-white'
+                const purchaseIconBg = isRejectedPurchase ? 'bg-red-100' : isDocsRequested ? 'bg-amber-100' : isApproved ? 'bg-green-100' : 'bg-primary-50'
+                const purchaseIconColor = isRejectedPurchase ? 'text-red-600' : isDocsRequested ? 'text-amber-600' : isApproved ? 'text-green-600' : 'text-primary-600'
+                const adminMsg = (purchase.admin_notes || purchase.documents_note || '').trim()
+                const shortMsg = adminMsg ? (adminMsg.length > 50 ? adminMsg.slice(0, 50) + '…' : adminMsg) : null
                 return (
                   <div key={purchase.id} className="group relative bg-white rounded-3xl border-2 border-gray-100 shadow-lg hover:shadow-xl transition-all duration-300 overflow-hidden hover:border-primary-200">
-                    {/* Status indicator bar */}
                     <div className={`absolute top-0 right-0 left-0 h-1 ${
                       isApproved ? 'bg-gradient-to-r from-green-500 to-green-400' :
                       isRejectedPurchase ? 'bg-gradient-to-r from-red-500 to-red-400' :
+                      isDocsRequested ? 'bg-gradient-to-r from-amber-500 to-amber-400' :
                       'bg-gradient-to-r from-gray-300 to-gray-200'
                     }`} />
-                    
                     <Link href={`/dashboard/applicant/purchase/${purchase.id}`} className="block">
                       <div className="p-5">
                         <div className="flex items-start gap-4">
@@ -931,11 +874,17 @@ export function ApplicantDashboardContent() {
                               <h3 className="font-bold text-lg text-gray-900">{projectName}</h3>
                               <ChevronRight className="w-5 h-5 text-gray-400 shrink-0 mt-0.5 group-hover:text-primary-600 transition-colors" />
                             </div>
-                            <p className="text-sm text-gray-500 mb-3">{new Date(purchase.created_at).toLocaleDateString('ar-TN', { dateStyle: 'long' })}</p>
+                            <p className="text-sm text-gray-500 mb-2">{new Date(purchase.created_at).toLocaleDateString('ar-TN', { dateStyle: 'long' })}</p>
                             <div className="flex flex-wrap items-center gap-2">
                               <span className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-sm font-semibold border-2 ${statusColor}`}>
                                 {statusLabel}
                               </span>
+                              {isDocsRequested && (
+                                <span className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-sm font-medium bg-amber-50 text-amber-800 border border-amber-200">
+                                  <Upload className="w-4 h-4" />
+                                  إرفاق المستندات
+                                </span>
+                              )}
                               {isApproved && (
                                 <span className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-sm font-medium bg-primary-50 text-primary-700 border border-primary-200">
                                   <span>عرض التقدم</span>
@@ -943,8 +892,8 @@ export function ApplicantDashboardContent() {
                                 </span>
                               )}
                             </div>
-                            {purchase.documents_note && (
-                              <p className="text-xs text-gray-600 mt-2 line-clamp-1">{purchase.documents_note}</p>
+                            {shortMsg && (
+                              <p className="text-xs text-gray-600 mt-2 line-clamp-2">{shortMsg}</p>
                             )}
                           </div>
                         </div>
@@ -957,28 +906,33 @@ export function ApplicantDashboardContent() {
           )}
         </section>
 
+        {/* توجيه إلى المشاريع — يظهر فقط عند وجود طلبات */}
+        {(applications.length > 0 || directPurchases.length > 0) && (
+          <div className="mb-6 rounded-2xl bg-primary-50 border border-primary-100 p-4">
+            <p className="text-sm text-gray-700 mb-2">
+              <span className="font-semibold text-gray-900">لطلب سكن أو شراء وحدة:</span> تصفّح المشاريع، اختر مشروعاً، ثم اضغط «احجز» لإرسال طلبك.
+            </p>
+            <Link href="/projects" className="inline-flex items-center gap-1.5 text-primary-600 font-semibold hover:underline text-sm">
+              عرض المشاريع
+              <ChevronLeft className="w-4 h-4" />
+            </Link>
+          </div>
+        )}
+
         {/* مساعدة قصيرة */}
         <div className="mb-6">
           <button type="button" onClick={() => setShowHelp(!showHelp)} className="flex items-center gap-2 text-gray-500 hover:text-gray-700 text-sm">
             <HelpCircle className="w-4 h-4" />
-            كيف أملأ الاستمارة؟
+            كيف أتابع طلباتي؟
             <ChevronDown className={`w-4 h-4 transition-transform ${showHelp ? 'rotate-180' : ''}`} />
           </button>
           {showHelp && (
             <div className="mt-2 rounded-xl bg-gray-50 border border-gray-100 p-4 text-sm text-gray-700 space-y-2">
-              <p><span className="font-medium text-gray-900">١.</span> اضغط «استمارة جديدة» واملأ الأقسام (يُحفظ تلقائياً).</p>
-              <p><span className="font-medium text-gray-900">٢.</span> اضغط «إرسال الطلب» في النهاية.</p>
-              <p><span className="font-medium text-gray-900">٣.</span> اضغط على أي طلب أعلاه لرؤية التفاصيل والمستندات والتقدم.</p>
+              <p><span className="font-medium text-gray-900">١.</span> اذهب إلى «المشاريع» واختر مشروعاً، ثم اضغط «احجز» لطلب شراء وحدة.</p>
+              <p><span className="font-medium text-gray-900">٢.</span> اضغط على أي طلب أعلاه لرؤية التفاصيل والمستندات والتقدم.</p>
             </div>
           )}
         </div>
-
-        <Link
-          href="/dashboard/applicant?form=1"
-          className="block w-full py-4 rounded-2xl bg-primary-600 text-white text-center font-semibold shadow-soft hover:bg-primary-700 active:scale-[0.98] transition-colors"
-        >
-          {applications.length > 0 || directPurchases.length > 0 ? 'استمارة جديدة' : 'بدء استمارة طلب السكن'}
-        </Link>
       </main>
 
       {/* نافذة جميع التنبيهات */}
@@ -999,30 +953,35 @@ export function ApplicantDashboardContent() {
                 <p className="text-sm text-gray-500 text-center py-8">لا توجد تنبيهات.</p>
               ) : (
                 <ul className="space-y-3">
-                  {alertsList.map((alert, idx) => (
-                    <li key={`${alert.appId}-${alert.type}-${idx}`} className="rounded-xl border border-gray-200 overflow-hidden">
-                      <Link
-                        href={`/dashboard/applicant/application/${alert.appId}`}
-                        onClick={() => setShowAlertsPopup(false)}
-                        className="block p-3 hover:bg-gray-50 transition-colors"
-                      >
-                        <div className="flex items-start gap-3">
-                          <span className={`shrink-0 flex h-8 w-8 items-center justify-center rounded-lg ${
-                            alert.type === 'rejected' ? 'bg-red-100 text-red-600' :
-                            alert.type === 'admin_request' ? 'bg-orange-100 text-orange-600' : 'bg-amber-100 text-amber-600'
-                          }`}>
-                            <AlertCircle className="w-4 h-4" />
-                          </span>
-                          <div className="min-w-0 flex-1">
-                            <p className="text-xs text-gray-500 mb-0.5">طلب سكن — {alert.date}</p>
-                            <p className="text-sm text-gray-900">{alert.text}</p>
-                            <p className="text-xs text-primary-600 font-medium mt-1.5">فتح الطلب ←</p>
+                  {alertsList.map((alert, idx) => {
+                    const href = alert.kind === 'purchase' && alert.purchaseId
+                      ? `/dashboard/applicant/purchase/${alert.purchaseId}`
+                      : `/dashboard/applicant/application/${alert.appId}`
+                    const iconBg = alert.type === 'rejected' ? 'bg-red-100 text-red-600' : alert.type === 'purchase_docs' ? 'bg-amber-100 text-amber-600' : alert.type === 'admin_request' ? 'bg-orange-100 text-orange-600' : 'bg-amber-100 text-amber-600'
+                    return (
+                      <li key={`${alert.kind}-${alert.appId || alert.purchaseId}-${idx}`} className="rounded-xl border border-gray-200 overflow-hidden">
+                        <Link
+                          href={href}
+                          onClick={() => setShowAlertsPopup(false)}
+                          className="block p-4 hover:bg-gray-50 transition-colors"
+                        >
+                          <div className="flex items-start gap-3">
+                            <span className={`shrink-0 flex h-9 w-9 items-center justify-center rounded-xl ${iconBg}`}>
+                              <AlertCircle className="w-5 h-5" />
+                            </span>
+                            <div className="min-w-0 flex-1">
+                              <p className="text-xs text-gray-500 mb-0.5">{alert.title} — {alert.date}</p>
+                              <p className="text-sm text-gray-900 leading-snug">{alert.text}</p>
+                              <p className="text-xs text-primary-600 font-medium mt-2">
+                                {alert.kind === 'purchase' ? 'إرفاق المستندات ←' : 'فتح الطلب ←'}
+                              </p>
+                            </div>
+                            <ChevronRight className="w-5 h-5 text-gray-400 shrink-0 mt-0.5" />
                           </div>
-                          <ChevronRight className="w-5 h-5 text-gray-400 shrink-0" />
-                        </div>
-                      </Link>
-                    </li>
-                  ))}
+                        </Link>
+                      </li>
+                    )
+                  })}
                 </ul>
               )}
             </div>

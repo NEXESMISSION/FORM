@@ -1,11 +1,19 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useEffect, useState, useRef } from 'react'
 import { useParams, useRouter } from 'next/navigation'
 import { supabase } from '@/lib/supabase'
 import Link from 'next/link'
 import Image from 'next/image'
-import { MapPin, Home, Calendar, Download, ShoppingCart, X } from 'lucide-react'
+import { MapPin, Home, Calendar, Download, X, ChevronRight } from 'lucide-react'
+
+/** Extract YouTube video ID from URL or return as-is if already an ID */
+function youtubeVideoId(urlOrId: string): string | null {
+  const s = (urlOrId || '').trim()
+  if (!s) return null
+  const match = s.match(/(?:youtube\.com\/watch\?v=|youtu\.be\/|embed\/)([a-zA-Z0-9_-]{11})/)
+  return match ? match[1] : (s.length <= 20 ? s : null)
+}
 import toast from 'react-hot-toast'
 import MapView from '@/components/MapView'
 import BottomNav from '@/components/BottomNav'
@@ -60,6 +68,8 @@ export default function ProjectDetailPage() {
   const [loading, setLoading] = useState(true)
   const [user, setUser] = useState<any>(null)
   const [showPurchaseModal, setShowPurchaseModal] = useState(false)
+  const [imageIndex, setImageIndex] = useState(0)
+  const sliderRef = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
     loadProject()
@@ -103,133 +113,219 @@ export default function ProjectDetailPage() {
   if (!project) return null
 
   return (
-    <div className="min-h-screen bg-surface">
-      <header className="sticky top-0 z-10 bg-white/95 backdrop-blur border-b border-gray-100">
-        <div className="max-w-[28rem] mx-auto px-4 h-14 flex items-center justify-center">
-          <Image src="/logo.png" alt="DOMOBAT" width={112} height={112} className="rounded-2xl w-auto h-auto" style={{ width: 'auto', height: 'auto' }} priority />
+    <div className="min-h-screen bg-gray-50">
+      <header className="sticky top-0 z-10 bg-white border-b border-gray-100">
+        <div className="max-w-[28rem] mx-auto px-4 min-h-[8rem] flex items-center justify-between py-1.5">
+          <Link href="/projects" className="flex items-center gap-1.5 text-gray-600 hover:text-gray-900 text-sm font-medium">
+            <ChevronRight className="w-5 h-5" />
+            المشاريع
+          </Link>
+          <Image src="/logo.png" alt="DOMOBAT" width={200} height={200} className="rounded-2xl object-contain shrink-0 w-36 h-36 sm:w-40 sm:h-40 max-h-[8rem]" priority />
+          <div className="w-16" />
         </div>
       </header>
 
-      <div className="max-w-[28rem] mx-auto px-4 py-6 pb-32">
-        {/* Hero with thumbnail or gradient */}
-        <div className="rounded-3xl overflow-hidden mb-6 bg-primary-800 min-h-[12rem] relative">
-          {project.thumbnail_url ? (
-            <div className="absolute inset-0">
-              <Image
-                src={project.thumbnail_url}
-                alt=""
-                fill
-                className="object-cover"
-                sizes="(max-width: 28rem) 100vw, 28rem"
-                priority
-              />
-              <div className="absolute inset-0 bg-gradient-to-t from-black/70 via-black/30 to-transparent" />
-            </div>
-          ) : (
-            <div className="absolute inset-0 bg-gradient-to-br from-primary-900 via-primary-800 to-primary-900" />
-          )}
-          <div className="relative z-10 p-6 flex flex-col justify-end min-h-[12rem]">
-            <h1 className="text-xl font-bold text-white mb-2">{project.name}</h1>
-            <div className="flex flex-wrap items-center gap-2 mb-2">
-              <span className="inline-block px-3 py-1 rounded-full text-sm font-medium bg-white/20 text-white w-fit">
-                {getProjectTiming(project)?.isFinished ? 'منتهي' : getStatusLabel(project.status)}
-              </span>
-              {getProjectTiming(project)?.label && (
-                <span className="inline-flex items-center gap-1 px-3 py-1 rounded-full text-sm font-medium bg-white/15 text-white">
-                  <Calendar className="w-4 h-4" />
-                  {getProjectTiming(project)!.label}
-                </span>
+      <main className="max-w-[28rem] mx-auto">
+        {/* Image slider — horizontal swipe + dots */}
+        {(() => {
+          const urls = Array.isArray(project.image_urls) && project.image_urls.length > 0
+            ? project.image_urls
+            : (project.thumbnail_url ? [project.thumbnail_url] : [])
+          if (urls.length === 0) {
+            return (
+              <section className="aspect-[3/2] max-h-72 bg-gray-200 flex items-center justify-center mx-4">
+                <Home className="w-12 h-12 text-gray-400" />
+              </section>
+            )
+          }
+          return (
+            <section className="relative">
+              <div
+                ref={sliderRef}
+                className="overflow-x-auto overflow-y-hidden snap-x snap-mandatory flex mx-0 scroll-smooth"
+                style={{ WebkitOverflowScrolling: 'touch' }}
+                onScroll={() => {
+                  const el = sliderRef.current
+                  if (!el || urls.length <= 1) return
+                  const w = el.offsetWidth
+                  const idx = Math.round(el.scrollLeft / w)
+                  setImageIndex(Math.min(idx, urls.length - 1))
+                }}
+              >
+                {urls.map((src: string, i: number) => (
+                  <div
+                    key={i}
+                    className="relative aspect-[3/2] max-h-72 bg-gray-100 overflow-hidden shrink-0 w-full snap-center snap-always"
+                  >
+                    <Image
+                      src={src}
+                      alt={`${project.name} ${i + 1}`}
+                      fill
+                      className="object-cover"
+                      sizes="(max-width: 28rem) 100vw, 28rem"
+                      priority={i === 0}
+                      unoptimized={src?.includes('media.prefabex.com')}
+                    />
+                  </div>
+                ))}
+              </div>
+              {urls.length > 1 && (
+                <div className="absolute bottom-3 left-0 right-0 flex justify-center gap-1.5 z-10 pointer-events-none">
+                  {urls.map((_: string, i: number) => (
+                    <button
+                      key={i}
+                      type="button"
+                      aria-label={`صورة ${i + 1}`}
+                      className={`w-2 h-2 rounded-full transition-all pointer-events-auto ${
+                        i === imageIndex ? 'bg-white scale-125 shadow' : 'bg-white/60'
+                      }`}
+                      onClick={() => {
+                        const el = sliderRef.current
+                        if (el) {
+                          const w = el.offsetWidth
+                          el.scrollTo({ left: i * w, behavior: 'smooth' })
+                          setImageIndex(i)
+                        }
+                      }}
+                    />
+                  ))}
+                </div>
               )}
-            </div>
-            {project.expected_price && (
-              <p className="text-white/90 text-lg font-semibold mt-3">
-                {Number(project.expected_price).toLocaleString()} د.ت
-              </p>
+            </section>
+          )
+        })()}
+
+        {/* Title and info below images */}
+        <div className="px-4 pt-4">
+          <h1 className="text-lg font-bold text-gray-900">{project.name}</h1>
+          <div className="flex items-center gap-2 mt-2 flex-wrap">
+            <span className={`px-2 py-0.5 rounded-md text-xs font-medium ${getStatusColor(project.status)}`}>
+              {getProjectTiming(project)?.isFinished ? 'منتهي' : getStatusLabel(project.status)}
+            </span>
+            {getProjectTiming(project)?.label && getProjectTiming(project)?.label !== 'منتهي' && (
+              <span className="text-xs text-gray-500">{getProjectTiming(project)!.label}</span>
             )}
           </div>
-        </div>
-
-        <div className="card rounded-3xl p-5 mb-6">
-          {project.description && (
-            <p className="text-gray-600 text-sm mb-5">{project.description}</p>
-          )}
-          <div className="space-y-4">
-            <div className="flex items-center gap-3 text-gray-700">
-              <MapPin className="w-5 h-5 text-primary-600 shrink-0" />
-              <span>{project.governorate}، {project.district}</span>
-            </div>
-            <div className="flex items-center gap-3 text-gray-700">
-              <Home className="w-5 h-5 text-primary-600 shrink-0" />
-              <span>{project.number_of_units} وحدة</span>
-            </div>
-            {project.delivery_date && (
-              <div className="flex items-center gap-3 text-gray-700">
-                <Calendar className="w-5 h-5 text-primary-600 shrink-0" />
-                <span>التسليم: {new Date(project.delivery_date).toLocaleDateString('ar-TN')}</span>
-              </div>
-            )}
-          </div>
-
-          {project.completion_percentage > 0 && (
-            <div className="mt-5">
-              <div className="flex justify-between text-sm mb-2">
-                <span className="text-gray-600">الإنجاز</span>
-                <span className="font-semibold">{project.completion_percentage}%</span>
-              </div>
-              <div className="w-full bg-gray-200 rounded-full h-2.5">
-                <div
-                  className="bg-primary-500 h-2.5 rounded-full transition-all"
-                  style={{ width: `${project.completion_percentage}%` }}
-                />
-              </div>
-            </div>
-          )}
-
-          {project.study_pdf_url && (
-            <a
-              href={project.study_pdf_url}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="btn-secondary rounded-2xl mt-5 inline-flex items-center gap-2"
-            >
-              <Download className="w-4 h-4" />
-              تحميل دراسة المشروع (PDF)
-            </a>
+          {project.expected_price && (
+            <p className="text-primary-600 font-semibold mt-2">{Number(project.expected_price).toLocaleString()} د.ت</p>
           )}
         </div>
 
-        {(project.location_lat && project.location_lng) && (
-          <div className="card rounded-3xl p-5 mb-6">
-            <h2 className="text-base font-bold text-gray-900 mb-3">موقع المشروع</h2>
-            <div className="h-52 rounded-2xl overflow-hidden">
-              <MapView lat={project.location_lat} lng={project.location_lng} />
-            </div>
-          </div>
-        )}
+        <div className="px-4 pt-4 space-y-5" style={{ paddingBottom: 'calc(12rem + env(safe-area-inset-bottom, 0px))' }}>
+          {/* Description & info */}
+          <section className="bg-white rounded-2xl border border-gray-100 p-5">
+            {project.description && (
+              <p className="text-gray-600 text-sm leading-relaxed mb-5">{project.description}</p>
+            )}
+            <ul className="space-y-3">
+              <li className="flex items-center gap-3 text-gray-700 text-sm">
+                <MapPin className="w-4 h-4 text-primary-500 shrink-0" />
+                <span>{project.governorate}، {project.district}</span>
+              </li>
+              <li className="flex items-center gap-3 text-gray-700 text-sm">
+                <Home className="w-4 h-4 text-primary-500 shrink-0" />
+                <span>{project.number_of_units} وحدة</span>
+              </li>
+              {project.delivery_date && (
+                <li className="flex items-center gap-3 text-gray-700 text-sm">
+                  <Calendar className="w-4 h-4 text-primary-500 shrink-0" />
+                  <span>التسليم: {new Date(project.delivery_date).toLocaleDateString('ar-TN')}</span>
+                </li>
+              )}
+            </ul>
+            {project.completion_percentage > 0 && (
+              <div className="mt-5 pt-4 border-t border-gray-100">
+                <div className="flex justify-between text-sm mb-2">
+                  <span className="text-gray-500">الإنجاز</span>
+                  <span className="font-semibold text-gray-900">{project.completion_percentage}%</span>
+                </div>
+                <div className="w-full bg-gray-100 rounded-full h-2">
+                  <div
+                    className="bg-primary-500 h-2 rounded-full transition-all"
+                    style={{ width: `${project.completion_percentage}%` }}
+                  />
+                </div>
+              </div>
+            )}
+            {project.study_pdf_url && (
+              <a
+                href={project.study_pdf_url}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="mt-5 inline-flex items-center gap-2 text-sm font-medium text-primary-600 hover:text-primary-700"
+              >
+                <Download className="w-4 h-4" />
+                تحميل دراسة المشروع (PDF)
+              </a>
+            )}
+          </section>
 
-        <div className="card rounded-3xl p-5">
-          <h2 className="text-lg font-bold text-gray-900 mb-2">شراء مباشر</h2>
-          <p className="text-gray-500 text-sm mb-5">
-            طلب شراء هذا المشروع مباشرة. سنتواصل معك لتأكيد الطلب والشروط.
-          </p>
-          {user ? (
-            <button
-              onClick={openPurchaseModal}
-              className="btn-primary w-full py-4 rounded-2xl shadow-soft flex items-center justify-center gap-2 font-semibold"
-            >
-              <ShoppingCart className="w-5 h-5" />
-              طلب شراء
-            </button>
-          ) : (
-            <div className="text-center py-2">
-              <p className="text-gray-500 text-sm mb-4">يرجى تسجيل الدخول لطلب الشراء</p>
-              <Link href="/auth/login" className="btn-primary w-full block text-center py-4 rounded-2xl shadow-soft font-semibold">
-                تسجيل الدخول
+          {/* Map */}
+          {(project.location_lat && project.location_lng) && (
+            <section className="bg-white rounded-2xl border border-gray-100 overflow-hidden">
+              <h2 className="px-5 py-3 text-sm font-semibold text-gray-900 border-b border-gray-100">موقع المشروع</h2>
+              <div className="h-48">
+                <MapView lat={project.location_lat} lng={project.location_lng} />
+              </div>
+            </section>
+          )}
+
+          {/* YouTube videos */}
+          {Array.isArray(project.video_urls) && project.video_urls.length > 0 && (
+            <section className="bg-white rounded-2xl border border-gray-100 overflow-hidden">
+              <h2 className="px-5 py-3 text-sm font-semibold text-gray-900 border-b border-gray-100">فيديوهات المشروع</h2>
+              <div className="p-4 space-y-4">
+                {project.video_urls.map((urlOrId: string, i: number) => {
+                  const id = youtubeVideoId(urlOrId)
+                  if (!id) return null
+                  const embedUrl = `https://www.youtube-nocookie.com/embed/${id}`
+                  return (
+                    <div key={i} className="aspect-video overflow-hidden bg-gray-100">
+                      <iframe
+                        src={embedUrl}
+                        title={`فيديو ${i + 1}`}
+                        allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+                        allowFullScreen
+                        className="w-full h-full"
+                      />
+                    </div>
+                  )
+                })}
+              </div>
+            </section>
+          )}
+        </div>
+      </main>
+
+      {/* Floating احجز — no background bar; hidden when purchase popup is open */}
+      {!showPurchaseModal && (
+        <div
+          className="fixed left-0 right-0 z-[60] max-w-[28rem] mx-auto px-4 pointer-events-none"
+          style={{
+            bottom: user
+              ? 'calc(7rem + env(safe-area-inset-bottom, 0px))'
+              : 'max(1rem, env(safe-area-inset-bottom, 0px))',
+          }}
+        >
+          <div className="pointer-events-auto">
+            {user ? (
+              <button
+                onClick={openPurchaseModal}
+                className="w-full py-3.5 rounded-xl font-semibold bg-primary-600 text-white hover:bg-primary-700 shadow-lg transition-colors"
+              >
+                احجز
+              </button>
+            ) : (
+              <Link
+                href="/auth/login"
+                className="block w-full py-3.5 rounded-xl font-semibold bg-primary-600 text-white hover:bg-primary-700 text-center shadow-lg transition-colors"
+              >
+                تسجيل الدخول للاحتيار
               </Link>
-            </div>
-          )}
+            )}
+          </div>
         </div>
-      </div>
+      )}
 
       {/* Modal طلب شراء — centred for PWA */}
       {showPurchaseModal && project && user && (

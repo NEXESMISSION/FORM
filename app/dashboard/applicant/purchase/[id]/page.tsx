@@ -1,16 +1,18 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useEffect, useState, useRef } from 'react'
 import { useRouter, useParams } from 'next/navigation'
 import { supabase } from '@/lib/supabase'
 import Link from 'next/link'
-import { ChevronRight, ExternalLink } from 'lucide-react'
+import { ChevronRight, ExternalLink, Upload, File, X } from 'lucide-react'
 import toast from 'react-hot-toast'
 import BottomNav from '@/components/BottomNav'
 
 const PURCHASE_STATUS_LABELS: Record<string, string> = {
   pending: 'قيد المراجعة',
   in_progress: 'قيد المتابعة',
+  documents_requested: 'مطلوب إرفاق مستندات',
+  documents_rejected: 'مستندات مرفوضة — يرجى الاستبدال',
   approved: 'مقبول',
   rejected: 'مرفوض',
 }
@@ -18,6 +20,8 @@ const PURCHASE_STATUS_LABELS: Record<string, string> = {
 const PURCHASE_STATUS_COLORS: Record<string, string> = {
   pending: 'bg-amber-100 text-amber-800 border-amber-200',
   in_progress: 'bg-primary-100 text-primary-800 border-primary-200',
+  documents_requested: 'bg-amber-100 text-amber-800 border-amber-200',
+  documents_rejected: 'bg-amber-100 text-amber-800 border-amber-200',
   approved: 'bg-green-100 text-green-800 border-green-200',
   rejected: 'bg-red-100 text-red-800 border-red-200',
 }
@@ -31,15 +35,26 @@ const DEFAULT_PROGRESS_STAGE_LABELS: Record<string, string> = {
 }
 const PROGRESS_STAGES_ORDER = ['study', 'design', 'construction', 'finishing', 'ready'] as const
 
+const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
+function normalizePurchaseId(params: unknown): string | null {
+  const raw = params && typeof params === 'object' && 'id' in params ? (params as { id?: unknown }).id : null
+  const s = Array.isArray(raw) ? raw[0] : raw
+  const id = typeof s === 'string' ? s.trim() : ''
+  return id && UUID_REGEX.test(id) ? id : null
+}
+
 export default function DirectPurchaseDetailPage() {
   const router = useRouter()
   const params = useParams()
-  const id = params?.id as string
+  const id = normalizePurchaseId(params)
   const [purchase, setPurchase] = useState<any>(null)
   const [projectName, setProjectName] = useState<string>('')
   const [projectCustomStages, setProjectCustomStages] = useState<string[] | null>(null)
   const [loading, setLoading] = useState(true)
   const [progressStageLabels, setProgressStageLabels] = useState<Record<string, string>>(() => ({ ...DEFAULT_PROGRESS_STAGE_LABELS }))
+  const [uploading, setUploading] = useState(false)
+  const [pendingFiles, setPendingFiles] = useState<{ file: File; id: string }[]>([])
+  const fileInputRef = useRef<HTMLInputElement>(null)
 
   useEffect(() => {
     if (!id) return
@@ -56,8 +71,9 @@ export default function DirectPurchaseDetailPage() {
         .eq('user_id', user.id)
         .maybeSingle()
       if (error || !row) {
+        if (error) console.error('[purchase detail]', error.message, error.details)
         toast.error('الطلب غير موجود')
-        router.replace('/dashboard')
+        router.replace('/dashboard?view=requests')
         return
       }
       setPurchase(row)
@@ -84,15 +100,77 @@ export default function DirectPurchaseDetailPage() {
     )
   }
 
-  const statusClass = PURCHASE_STATUS_COLORS[purchase.status] || 'bg-gray-100 text-gray-800 border-gray-200'
+  const isDocsRequested = purchase.status === 'documents_requested' || purchase.status === 'documents_rejected'
   const docs = (purchase.documents && Array.isArray(purchase.documents)) ? purchase.documents : []
+  const docsParsed = docs.map((item: any) => typeof item === 'string' ? (() => { try { return JSON.parse(item) } catch { return {} } })() : item)
+  const hasRejectedDoc = docsParsed.some((d: any) => d.status === 'rejected')
+  const showUploadSection = isDocsRequested || hasRejectedDoc
+
+  const statusClass = (() => {
+    if (purchase.status === 'documents_requested' || purchase.status === 'documents_rejected') return 'bg-amber-100 text-amber-800 border-amber-200'
+    return PURCHASE_STATUS_COLORS[purchase.status] || 'bg-gray-100 text-gray-800 border-gray-200'
+  })()
   const formData = purchase.form_data && typeof purchase.form_data === 'object' ? purchase.form_data : {}
+
+  const safePathSegment = (s: string) => s.replace(/[^a-zA-Z0-9_-]/g, '-').replace(/-+/g, '-').replace(/^-|-$/g, '') || 'doc'
+  const addFiles = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = Array.from(e.target.files || [])
+    if (files.length === 0) return
+    setPendingFiles(prev => [...prev, ...files.map(f => ({ file: f, id: `${f.name}-${Date.now()}-${Math.random()}` }))])
+    if (e.target) e.target.value = ''
+  }
+  const removePending = (id: string) => setPendingFiles(prev => prev.filter(p => p.id !== id))
+  const uploadAndSave = async () => {
+    if (pendingFiles.length === 0) {
+      toast.error('اختر ملفات أولاً')
+      return
+    }
+    const { data: { user } } = await supabase.auth.getUser()
+    if (!user) return
+    setUploading(true)
+    try {
+      const existingRaw = Array.isArray(purchase.documents) ? purchase.documents : []
+      const existingAsObjects = existingRaw.map((item: any) =>
+        typeof item === 'string' ? (() => { try { return JSON.parse(item) } catch { return { url: item } } })() : (item && typeof item === 'object' ? item : { url: item })
+      )
+      const newEntries: any[] = []
+      for (let i = 0; i < pendingFiles.length; i++) {
+        const { file } = pendingFiles[i]
+        const ext = file.name.split('.').pop() || 'bin'
+        const name = safePathSegment(file.name.slice(0, 30))
+        const path = `purchase-documents/${user.id}/${purchase.project_id}/${name}-${Date.now()}-${i}.${ext}`
+        const { error: upErr } = await supabase.storage.from('documents').upload(path, file, { cacheControl: '3600', upsert: false })
+        if (upErr) throw new Error(`فشل رفع ${file.name}`)
+        const { data: { publicUrl } } = supabase.storage.from('documents').getPublicUrl(path)
+        newEntries.push({
+          docType: 'مستند مرفق',
+          fileName: file.name,
+          fileSize: file.size,
+          url: publicUrl,
+          uploadedAt: new Date().toISOString(),
+          status: 'pending_review',
+        })
+      }
+      const updatedDocs = [...existingAsObjects, ...newEntries]
+      const documentsPayload = JSON.parse(JSON.stringify(updatedDocs)) as typeof updatedDocs
+      const { error } = await supabase.from('project_direct_purchases').update({ documents: documentsPayload }).eq('id', purchase.id).eq('user_id', user.id)
+      if (error) throw error
+      setPurchase((prev: any) => ({ ...prev, documents: updatedDocs }))
+      setPendingFiles([])
+      toast.success('تم رفع المستندات. ستتم مراجعتها من الإدارة.')
+    } catch (err: any) {
+      if (err?.message) console.error('[purchase documents update]', err.message, err.details)
+      toast.error(err?.message || 'فشل رفع المستندات')
+    } finally {
+      setUploading(false)
+    }
+  }
 
   return (
     <div className="min-h-screen bg-surface flex flex-col pb-28">
       <header className="sticky top-0 z-10 bg-white/95 backdrop-blur border-b border-gray-100">
         <div className="max-w-[28rem] mx-auto px-4 h-14 flex items-center gap-3">
-          <Link href="/dashboard" className="p-2 -m-2 rounded-xl hover:bg-gray-100 flex items-center text-gray-600">
+          <Link href="/dashboard?view=requests" className="p-2 -m-2 rounded-xl hover:bg-gray-100 flex items-center text-gray-600">
             <ChevronRight className="w-5 h-5" />
           </Link>
           <span className="text-base font-semibold text-gray-900">تفاصيل طلب الشراء</span>
@@ -109,10 +187,60 @@ export default function DirectPurchaseDetailPage() {
         </div>
 
         {/* ملاحظة من الإدارة إن وجدت */}
-        {purchase.admin_notes && (
-          <div className="rounded-2xl bg-primary-50 border border-primary-200 p-4 mb-6">
-            <p className="font-semibold text-primary-900 text-sm mb-2">ملاحظة من الإدارة</p>
-            <p className="text-sm text-primary-800 whitespace-pre-wrap">{purchase.admin_notes}</p>
+        {(purchase.admin_notes || (showUploadSection && (purchase.documents_note || purchase.admin_notes))) && (
+          <div className="rounded-2xl bg-amber-50 border border-amber-200 p-4 mb-6">
+            <p className="font-semibold text-amber-900 text-sm mb-2">ملاحظة من الإدارة</p>
+            <p className="text-sm text-amber-800 whitespace-pre-wrap">{purchase.admin_notes || purchase.documents_note || ''}</p>
+          </div>
+        )}
+
+        {/* إرفاق / استبدال المستندات عندما يُطلب من المستخدم */}
+        {showUploadSection && (
+          <div className="rounded-2xl border-2 border-amber-200 bg-amber-50/80 p-5 mb-6">
+            <h3 className="text-base font-bold text-amber-900 mb-1">إرفاق المستندات أو استبدال المرفوضة</h3>
+            <p className="text-sm text-amber-800 mb-4">ارفع الملفات المطلوبة (PDF أو صور). يمكنك إرفاق عدة ملفات ثم الضغط على «إرسال».</p>
+            <input
+              ref={fileInputRef}
+              type="file"
+              multiple
+              accept=".pdf,.jpg,.jpeg,.png,.doc,.docx"
+              onChange={addFiles}
+              className="hidden"
+            />
+            <button
+              type="button"
+              onClick={() => fileInputRef.current?.click()}
+              className="w-full py-3 px-4 border-2 border-dashed border-amber-300 rounded-xl bg-white text-amber-800 font-medium flex items-center justify-center gap-2 hover:bg-amber-50 transition-colors"
+            >
+              <Upload className="w-5 h-5" />
+              اختر ملفات
+            </button>
+            {pendingFiles.length > 0 && (
+              <div className="mt-4 space-y-2">
+                {pendingFiles.map(({ file, id }) => (
+                  <div key={id} className="flex items-center gap-2 py-2 px-3 bg-white rounded-lg border border-amber-200">
+                    <File className="w-4 h-4 text-amber-600 shrink-0" />
+                    <span className="text-sm text-gray-800 flex-1 truncate">{file.name}</span>
+                    <span className="text-xs text-gray-500">{(file.size / 1024).toFixed(1)} KB</span>
+                    <button type="button" onClick={() => removePending(id)} className="p-1 rounded hover:bg-red-100 text-red-600" aria-label="إزالة">
+                      <X className="w-4 h-4" />
+                    </button>
+                  </div>
+                ))}
+                <button
+                  type="button"
+                  onClick={uploadAndSave}
+                  disabled={uploading}
+                  className="w-full py-3 rounded-xl bg-amber-600 text-white font-semibold hover:bg-amber-700 disabled:opacity-60 flex items-center justify-center gap-2"
+                >
+                  {uploading ? (
+                    <>جاري الرفع...</>
+                  ) : (
+                    <>إرسال المستندات</>
+                  )}
+                </button>
+              </div>
+            )}
           </div>
         )}
 
@@ -235,7 +363,13 @@ export default function DirectPurchaseDetailPage() {
             <p className="text-sm text-gray-500">لا توجد بيانات إضافية.</p>
           ) : (
             <dl className="space-y-3 text-sm">
-              {Object.entries(formData).map(([key, value]) => (
+              {Object.entries(formData)
+                .filter(([key, value]) => {
+                  if (key !== 'email') return true
+                  const v = value != null ? String(value) : ''
+                  return !v || !v.includes('@domobat.user')
+                })
+                .map(([key, value]) => (
                 <div key={key}>
                   <dt className="text-gray-500">{key === 'full_name' ? 'الاسم' : key === 'phone' ? 'الهاتف' : key === 'cin' ? 'البطاقة' : key === 'email' ? 'البريد' : key === 'notes' ? 'ملاحظات' : key}</dt>
                   <dd className="font-medium text-gray-900">{String(value || '—')}</dd>

@@ -3,7 +3,7 @@ import Image from 'next/image'
 import LandingVideo from '@/components/LandingVideo'
 
 const LAYOUT_MAX = 'max-w-[28rem] mx-auto px-4 sm:px-5'
-const LOGO_SIZE = 120
+const LOGO_SIZE = 200
 
 export default function HomePage() {
   return (
@@ -11,7 +11,7 @@ export default function HomePage() {
       <nav className="sticky top-0 z-50 bg-gold-50/95 border-b-2 border-gold-300 flex items-center min-h-[8rem] safe-top">
         <div className={`${LAYOUT_MAX} w-full flex items-center justify-between gap-3`}>
           <Link href="/" className="flex items-center shrink-0 touch-manipulation" aria-label="DOMOBAT">
-            <Image src="/logo.png" alt="DOMOBAT" width={LOGO_SIZE} height={LOGO_SIZE} className="rounded-2xl w-[7.5rem] h-[7.5rem] object-contain" style={{ width: 'auto', height: 'auto' }} priority sizes="120px" />
+            <Image src="/logo.png" alt="DOMOBAT" width={LOGO_SIZE} height={LOGO_SIZE} className="rounded-2xl w-36 h-36 sm:w-40 sm:h-40 object-contain shrink-0 max-h-[8rem]" style={{ width: 'auto', height: 'auto' }} priority sizes="160px" />
           </Link>
           <div className="flex items-center gap-2 shrink-0">
             <Link href="/auth/login" className="min-h-[2.75rem] min-w-[2.75rem] inline-flex items-center justify-center px-4 py-2.5 text-sm font-medium text-gold-900 hover:text-gold-950 active:bg-gold-100 transition-colors rounded-xl touch-manipulation">

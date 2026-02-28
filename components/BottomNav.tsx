@@ -5,9 +5,10 @@ import Link from 'next/link'
 import { usePathname, useSearchParams } from 'next/navigation'
 import { Home, FolderOpen, User } from 'lucide-react'
 
+// Main (first) tab = Projects; second = My requests (dashboard); third = Profile
 const navItems = [
-  { href: '/dashboard', label: 'الرئيسية', icon: Home, match: (p: string, q: URLSearchParams) => (p === '/dashboard' || p?.startsWith('/dashboard?')) && q.get('form') !== '1' && q.get('tab') !== 'profile' },
   { href: '/projects', label: 'المشاريع', icon: FolderOpen, match: (p: string) => p?.startsWith('/projects') ?? false },
+  { href: '/dashboard?view=requests', label: 'طلباتي', icon: Home, match: (p: string, q: URLSearchParams) => (p === '/dashboard' || p?.startsWith('/dashboard?')) && (q.get('view') === 'requests' || q.get('form') === '1') },
   { href: '/dashboard?tab=profile', label: 'الملف', icon: User, match: (p: string, q: URLSearchParams) => p === '/dashboard' && q.get('tab') === 'profile' },
 ]
 

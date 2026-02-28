@@ -87,7 +87,7 @@ export default function HousingApplicationDetailPage() {
       ])
       if (error || !appData) {
         toast.error('الطلب غير موجود')
-        router.replace('/dashboard')
+        router.replace('/dashboard?view=requests')
         return
       }
       setApp(appData)
@@ -275,7 +275,7 @@ export default function HousingApplicationDetailPage() {
     <div className="min-h-screen bg-gray-50 flex flex-col pb-28">
       <header className="sticky top-0 z-10 bg-white shadow-sm">
         <div className="max-w-[28rem] mx-auto px-4 h-14 flex items-center gap-3">
-          <Link href="/dashboard" className="p-2 -m-2 rounded-xl hover:bg-gray-100 flex items-center text-gray-600" aria-label="العودة">
+          <Link href="/dashboard?view=requests" className="p-2 -m-2 rounded-xl hover:bg-gray-100 flex items-center text-gray-600" aria-label="العودة">
             <ChevronRight className="w-5 h-5" />
           </Link>
           <span className="text-lg font-bold text-gray-900 flex-1">تفاصيل طلب السكن</span>
@@ -559,7 +559,9 @@ export default function HousingApplicationDetailPage() {
           <h3 className="text-base font-bold text-gray-900 mb-4">ملخص الطلب</h3>
           <dl className="grid grid-cols-1 sm:grid-cols-2 gap-x-6 gap-y-3 text-sm">
             <div><dt className="text-gray-500 text-xs font-medium">الاسم</dt><dd className="font-medium text-gray-900 mt-0.5">{[app.first_name, app.last_name].filter(Boolean).join(' ') || '—'}</dd></div>
-            <div><dt className="text-gray-500 text-xs font-medium">البريد</dt><dd className="font-medium text-gray-900 mt-0.5 truncate" title={app.email || ''}>{app.email || '—'}</dd></div>
+            {!(app.email && String(app.email).endsWith('@domobat.user')) && (
+              <div><dt className="text-gray-500 text-xs font-medium">البريد</dt><dd className="font-medium text-gray-900 mt-0.5 truncate" title={app.email || ''}>{app.email || '—'}</dd></div>
+            )}
             <div><dt className="text-gray-500 text-xs font-medium">رقم البطاقة</dt><dd className="font-medium text-gray-900 mt-0.5">{app.national_id || '—'}</dd></div>
             <div><dt className="text-gray-500 text-xs font-medium">تاريخ الولادة</dt><dd className="font-medium text-gray-900 mt-0.5">{app.date_of_birth ? new Date(app.date_of_birth).toLocaleDateString('ar-TN') : '—'}</dd></div>
             <div><dt className="text-gray-500 text-xs font-medium">الحالة الاجتماعية</dt><dd className="font-medium text-gray-900 mt-0.5">{MARITAL_LABELS[app.marital_status] || app.marital_status || '—'}</dd></div>

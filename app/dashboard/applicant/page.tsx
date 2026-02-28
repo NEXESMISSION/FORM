@@ -16,7 +16,7 @@ export default function ApplicantDashboard() {
     const search = window.location.search || ''
     const isMainApplicant = path === '/dashboard/applicant' || path === '/dashboard/applicant/'
     if (isMainApplicant) {
-      router.replace('/dashboard' + search)
+      router.replace(search ? '/dashboard' + search : '/dashboard?view=requests')
       return
     }
     setRedirecting(false)

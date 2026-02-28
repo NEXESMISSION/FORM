@@ -1,12 +1,12 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState } from 'react'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
 import Image from 'next/image'
 import { supabase } from '@/lib/supabase'
 import toast from 'react-hot-toast'
-import { ArrowRight, User, Phone, Shield, Lock, MapPin, FileText } from 'lucide-react'
+import { ArrowRight, User, Shield, Lock, MapPin } from 'lucide-react'
 
 export default function RegisterPage() {
   const router = useRouter()
@@ -32,9 +32,10 @@ export default function RegisterPage() {
   const [checkingPhone, setCheckingPhone] = useState(false)
 
   const steps = [
-    { num: 1, title: 'المعلومات الشخصية', icon: User },
+    { num: 1, title: 'الاسم والهاتف', icon: User },
     { num: 2, title: 'التحقق من الهاتف', icon: Shield },
-    { num: 3, title: 'كلمة المرور', icon: Lock },
+    { num: 3, title: 'البطاقة والمدينة', icon: MapPin },
+    { num: 4, title: 'كلمة المرور', icon: Lock },
   ]
 
   const sendVerificationCode = async () => {
@@ -111,7 +112,7 @@ export default function RegisterPage() {
       }
 
       toast.success('تم التحقق من رقم الهاتف')
-      setStep(3)
+      setStep(3) // CIN & city step
     } catch (error: any) {
       toast.error(error.message || 'رمز التحقق غير صحيح')
     } finally {
@@ -121,9 +122,9 @@ export default function RegisterPage() {
 
   const handleRegister = async (e: React.FormEvent) => {
     e.preventDefault()
-    
-    if (!name || !phone || !cin || !governorate) {
-      toast.error('املأ جميع الحقول المطلوبة')
+    // All fields must be typed by user (no auto-collect); require non-empty trimmed values
+    if (!name?.trim() || !phone?.trim() || !cin?.trim() || !governorate?.trim()) {
+      toast.error('املأ جميع الحقول المطلوبة (الاسم، الهاتف، البطاقة، المدينة)')
       return
     }
 
@@ -239,7 +240,7 @@ export default function RegisterPage() {
                 router.push('/auth/login?message=confirm')
               } else {
                 if (typeof window !== 'undefined') sessionStorage.setItem('domobat_just_signed_up', '1')
-                router.push('/dashboard?form=1')
+                router.push('/dashboard')
               }
               setLoading(false)
               return
@@ -268,7 +269,7 @@ export default function RegisterPage() {
               router.push('/auth/login?message=confirm')
             } else {
               if (typeof window !== 'undefined') sessionStorage.setItem('domobat_just_signed_up', '1')
-              router.push('/dashboard?form=1')
+              router.push('/dashboard')
             }
             setLoading(false)
             return
@@ -291,7 +292,7 @@ export default function RegisterPage() {
         router.push('/auth/login?message=confirm')
       } else {
         if (typeof window !== 'undefined') sessionStorage.setItem('domobat_just_signed_up', '1')
-        router.push('/dashboard?form=1')
+        router.push('/dashboard')
       }
     } catch (error: any) {
       console.error('Registration error:', error)
@@ -302,14 +303,14 @@ export default function RegisterPage() {
   }
 
   const LAYOUT_MAX = 'max-w-[28rem] mx-auto px-4 sm:px-5'
-  const LOGO_SIZE = 120
+  const LOGO_SIZE = 200
 
   return (
     <div className="min-h-screen bg-gold-50 flex flex-col min-h-[100dvh]">
       <nav className="sticky top-0 z-50 bg-gold-50/95 border-b-2 border-gold-300 flex items-center min-h-[8rem] safe-top">
         <div className={`${LAYOUT_MAX} w-full flex items-center justify-between gap-3`}>
           <Link href="/" className="flex items-center shrink-0 touch-manipulation" aria-label="DOMOBAT">
-            <Image src="/logo.png" alt="DOMOBAT" width={LOGO_SIZE} height={LOGO_SIZE} className="rounded-2xl w-[7.5rem] h-[7.5rem] object-contain" style={{ width: 'auto', height: 'auto' }} priority sizes="120px" />
+            <Image src="/logo.png" alt="DOMOBAT" width={LOGO_SIZE} height={LOGO_SIZE} className="rounded-2xl w-36 h-36 sm:w-40 sm:h-40 object-contain shrink-0 max-h-[8rem]" style={{ width: 'auto', height: 'auto' }} priority sizes="160px" />
           </Link>
           <Link href="/" className="flex items-center gap-2 min-h-[2.75rem] text-gold-900 hover:text-gold-950 text-sm font-medium touch-manipulation active:opacity-80">
             <ArrowRight className="w-4 h-4 shrink-0" />
@@ -320,22 +321,22 @@ export default function RegisterPage() {
 
       <main className={`${LAYOUT_MAX} w-full pt-6 pb-28 flex-1 safe-bottom`}>
         <h1 className="text-lg font-bold text-gold-950 mb-0.5">إنشاء حساب</h1>
-        <p className="text-gold-900 text-xs mb-5">المعلومات الشخصية ثم التحقق ثم كلمة المرور</p>
+        <p className="text-gold-900 text-xs mb-5">الاسم والهاتف ثم التحقق ثم البطاقة والمدينة ثم كلمة المرور</p>
 
         <div className="w-full bg-gold-200 rounded-full h-1 mb-6">
-          <div className="bg-gold-600 h-1 rounded-full transition-all duration-300" style={{ width: `${(step / 3) * 100}%` }} />
+          <div className="bg-gold-600 h-1 rounded-full transition-all duration-300" style={{ width: `${(step / 4) * 100}%` }} />
         </div>
 
         <div className="space-y-5 mb-6">
           {step === 1 && (
             <form onSubmit={async (e) => { 
               e.preventDefault()
-              if (cinExists || phoneTaken) {
+              if (phoneTaken) {
                 toast.error('يرجى إصلاح الأخطاء قبل المتابعة')
                 return
               }
-              if (!name || !phone || !cin || !governorate) {
-                toast.error('املأ جميع الحقول المطلوبة')
+              if (!name?.trim() || !phone?.trim()) {
+                toast.error('أدخل الاسم ورقم الهاتف')
                 return
               }
               await sendVerificationCode()
@@ -399,78 +400,18 @@ export default function RegisterPage() {
                     </p>
                   )}
                 </div>
-
-                <div>
-                  <label htmlFor="cin" className="block text-xs font-medium text-gold-900 mb-1">رقم بطاقة التعريف (CIN) *</label>
-                  <div className="relative">
-                    <input
-                      id="cin"
-                      type="text"
-                      value={cin}
-                      onChange={async (e) => {
-                        const value = e.target.value.trim()
-                        setCin(value)
-                        setCinExists(false)
-                        if (value && value.length >= 4) {
-                          setCheckingCin(true)
-                          try {
-                            const { data: existingProfile } = await supabase
-                              .from('profiles')
-                              .select('id')
-                              .eq('cin', value)
-                              .maybeSingle()
-                            if (existingProfile) {
-                              setCinExists(true)
-                            }
-                          } catch {}
-                          finally { setCheckingCin(false) }
-                        }
-                      }} 
-                      className={`w-full min-h-[2.75rem] px-4 py-3 rounded-xl border bg-white focus:ring-2 focus:ring-gold-400/40 focus:border-gold-500 outline-none text-base placeholder:text-gold-400 touch-manipulation ${cinExists ? 'border-red-500 focus:border-red-500 focus:ring-red-500' : 'border-gold-300'}`}
-                      placeholder="رقم البطاقة"
-                      required
-                    />
-                    {checkingCin && (
-                      <div className="absolute left-4 top-1/2 -translate-y-1/2">
-                        <div className="spinner w-4 h-4 text-gold-600"></div>
-                      </div>
-                    )}
-                  </div>
-                  {cinExists && (
-                    <p className="text-xs text-red-600 mt-1.5 flex items-center gap-1">
-                      <span>⚠️</span>
-                      رقم بطاقة التعريف مسجّل مسبقاً
-                    </p>
-                  )}
-                </div>
-
-                <div>
-                  <label htmlFor="governorate" className="block text-xs font-medium text-gold-900 mb-1">الولاية *</label>
-                  <select
-                    id="governorate"
-                    value={governorate}
-                    onChange={(e) => setGovernorate(e.target.value)}
-                    className="w-full min-h-[2.75rem] px-4 py-3 rounded-xl border-2 border-gold-300 bg-white focus:ring-2 focus:ring-gold-400/50 focus:border-gold-500 outline-none text-base text-gold-900 touch-manipulation"
-                    required
-                  >
-                    <option value="">اختر الولاية</option>
-                    {tunisianGovernorates.map((gov) => (
-                      <option key={gov} value={gov}>{gov}</option>
-                    ))}
-                  </select>
-                </div>
               </div>
 
               <button
                 type="submit"
-                disabled={loading || phoneTaken || checkingPhone || cinExists || checkingCin}
+                disabled={loading || phoneTaken || checkingPhone}
                 className="w-full min-h-[2.75rem] py-3.5 rounded-xl bg-gradient-to-b from-gold-400 to-gold-600 text-white text-sm font-medium shadow-md hover:shadow-lg hover:from-gold-500 hover:to-gold-700 active:scale-[0.99] transition-all disabled:opacity-50 touch-manipulation"
               >
                 {loading
                   ? <span className="spinner mx-auto" />
-                  : checkingPhone || checkingCin
+                  : checkingPhone
                     ? 'جاري التحقق...'
-                    : phoneTaken || cinExists
+                    : phoneTaken
                       ? 'يرجى إصلاح الأخطاء'
                       : 'التالي: إرسال رمز التحقق'}
               </button>
@@ -506,6 +447,88 @@ export default function RegisterPage() {
           )}
 
           {step === 3 && (
+            <form onSubmit={(e) => {
+              e.preventDefault()
+              if (cinExists) {
+                toast.error('يرجى إصلاح الأخطاء قبل المتابعة')
+                return
+              }
+              if (!cin?.trim() || !governorate?.trim()) {
+                toast.error('أدخل رقم البطاقة واختر المدينة/الولاية')
+                return
+              }
+              setStep(4)
+            }} className="space-y-4 animate-fade-in">
+              <div className="space-y-3">
+                <div>
+                  <label htmlFor="cin" className="block text-xs font-medium text-gold-900 mb-1">رقم بطاقة التعريف (CIN) *</label>
+                  <div className="relative">
+                    <input
+                      id="cin"
+                      type="text"
+                      value={cin}
+                      onChange={async (e) => {
+                        const value = e.target.value.trim()
+                        setCin(value)
+                        setCinExists(false)
+                        if (value && value.length >= 4) {
+                          setCheckingCin(true)
+                          try {
+                            const { data: existingProfile } = await supabase
+                              .from('profiles')
+                              .select('id')
+                              .eq('cin', value)
+                              .maybeSingle()
+                            if (existingProfile) setCinExists(true)
+                          } catch {}
+                          finally { setCheckingCin(false) }
+                        }
+                      }}
+                      className={`w-full min-h-[2.75rem] px-4 py-3 rounded-xl border bg-white focus:ring-2 focus:ring-gold-400/40 focus:border-gold-500 outline-none text-base placeholder:text-gold-400 touch-manipulation ${cinExists ? 'border-red-500 focus:border-red-500 focus:ring-red-500' : 'border-gold-300'}`}
+                      placeholder="رقم البطاقة"
+                      required
+                    />
+                    {checkingCin && (
+                      <div className="absolute left-4 top-1/2 -translate-y-1/2">
+                        <div className="spinner w-4 h-4 text-gold-600"></div>
+                      </div>
+                    )}
+                  </div>
+                  {cinExists && (
+                    <p className="text-xs text-red-600 mt-1.5 flex items-center gap-1">
+                      <span>⚠️</span>
+                      رقم بطاقة التعريف مسجّل مسبقاً
+                    </p>
+                  )}
+                </div>
+                <div>
+                  <label htmlFor="governorate" className="block text-xs font-medium text-gold-900 mb-1">المدينة / الولاية *</label>
+                  <select
+                    id="governorate"
+                    value={governorate}
+                    onChange={(e) => setGovernorate(e.target.value)}
+                    className="w-full min-h-[2.75rem] px-4 py-3 rounded-xl border-2 border-gold-300 bg-white focus:ring-2 focus:ring-gold-400/50 focus:border-gold-500 outline-none text-base text-gold-900 touch-manipulation"
+                    required
+                  >
+                    <option value="">اختر المدينة أو الولاية</option>
+                    {tunisianGovernorates.map((gov) => (
+                      <option key={gov} value={gov}>{gov}</option>
+                    ))}
+                  </select>
+                </div>
+              </div>
+              <div className="flex gap-2">
+                <button type="button" onClick={() => setStep(2)} className="flex-1 min-h-[2.75rem] py-2.5 rounded-xl border-2 border-gold-300 bg-white text-gold-900 text-sm font-medium hover:bg-gold-50 active:scale-[0.99] touch-manipulation">
+                  رجوع
+                </button>
+                <button type="submit" disabled={cinExists || checkingCin} className="flex-1 min-h-[2.75rem] py-2.5 rounded-xl bg-gradient-to-b from-gold-400 to-gold-600 text-white text-sm font-medium hover:from-gold-500 hover:to-gold-700 disabled:opacity-50 active:scale-[0.99] transition-all touch-manipulation">
+                  التالي: كلمة المرور
+                </button>
+              </div>
+            </form>
+          )}
+
+          {step === 4 && (
             <form onSubmit={handleRegister} className="space-y-4">
               <p className="text-xs text-gold-900 mb-2">اختر كلمة مرور (6 أحرف على الأقل)</p>
               <div>
@@ -534,7 +557,7 @@ export default function RegisterPage() {
                 />
               </div>
               <div className="flex gap-2">
-                <button type="button" onClick={() => setStep(2)} className="flex-1 min-h-[2.75rem] py-2.5 rounded-xl border-2 border-gold-300 bg-white text-gold-900 text-sm font-medium hover:bg-gold-50 active:scale-[0.99] touch-manipulation">
+                <button type="button" onClick={() => setStep(3)} className="flex-1 min-h-[2.75rem] py-2.5 rounded-xl border-2 border-gold-300 bg-white text-gold-900 text-sm font-medium hover:bg-gold-50 active:scale-[0.99] touch-manipulation">
                   رجوع
                 </button>
                 <button type="submit" disabled={loading} className="flex-1 min-h-[2.75rem] py-2.5 rounded-xl bg-gradient-to-b from-gold-400 to-gold-600 text-white text-sm font-medium hover:from-gold-500 hover:to-gold-700 disabled:opacity-50 active:scale-[0.99] transition-all touch-manipulation">

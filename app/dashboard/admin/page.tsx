@@ -120,6 +120,7 @@ export default function AdminDashboard() {
   const [showFiltersMobile, setShowFiltersMobile] = useState(false)
   const [extendProject, setExtendProject] = useState<any>(null)
   const [extendEndDate, setExtendEndDate] = useState('')
+  const [purchasePaymentFilter, setPurchasePaymentFilter] = useState<'all' | 'full' | 'installment'>('all')
 
   useEffect(() => {
     checkUser()
@@ -463,10 +464,10 @@ export default function AdminDashboard() {
 
   return (
     <div className="min-h-screen bg-gold-50">
-      <header className="sticky top-0 z-10 bg-gold-50/95 backdrop-blur border-b-2 border-gold-200 safe-top">
-        <div className="max-w-[28rem] sm:max-w-2xl md:max-w-4xl mx-auto px-3 sm:px-4 h-16 sm:h-20 flex justify-between items-center gap-2">
+      <header className="sticky top-0 z-10 bg-gold-50/95 backdrop-blur border-b-2 border-gold-200 safe-top min-h-[8rem] flex items-center">
+        <div className="max-w-[28rem] sm:max-w-2xl md:max-w-4xl mx-auto px-3 sm:px-4 min-h-[8rem] flex justify-between items-center gap-2">
           <div className="flex items-center min-w-0">
-            <Image src="/logo.png" alt="DOMOBAT" width={80} height={80} className="rounded-2xl shrink-0 w-14 h-14 sm:w-16 sm:h-16 object-contain" style={{ width: 'auto', height: 'auto' }} priority />
+            <Image src="/logo.png" alt="DOMOBAT" width={200} height={200} className="rounded-2xl shrink-0 w-36 h-36 sm:w-40 sm:h-40 object-contain max-h-[8rem]" style={{ width: 'auto', height: 'auto' }} priority />
           </div>
           <span className="text-sm font-semibold text-gold-900 hidden sm:inline">لوحة الإدارة</span>
           <button
@@ -800,11 +801,26 @@ export default function AdminDashboard() {
         )}
 
         {/* تبويب طلبات الشراء المباشر */}
-        {activeTab === 'purchases' && (
+        {activeTab === 'purchases' && (() => {
+          const filteredPurchases = purchasePaymentFilter === 'all'
+            ? directPurchases
+            : directPurchases.filter((p: any) => (p.payment_type || 'full') === purchasePaymentFilter)
+          return (
           <div className="rounded-2xl sm:rounded-3xl border-2 border-gold-200 bg-white p-4 sm:p-5 shadow-sm">
             <div className="flex flex-col sm:flex-row sm:justify-between sm:items-center gap-3 mb-4">
               <h2 className="text-lg font-bold text-gold-950">طلبات الشراء المباشر</h2>
-              <span className="text-sm text-gold-600">{directPurchases.length} طلب</span>
+              <div className="flex flex-wrap items-center gap-2">
+                <select
+                  value={purchasePaymentFilter}
+                  onChange={(e) => setPurchasePaymentFilter(e.target.value as 'all' | 'full' | 'installment')}
+                  className="px-3 py-2 text-sm rounded-xl border-2 border-gold-200 bg-white text-gold-900 focus:ring-2 focus:ring-gold-400/50 outline-none"
+                >
+                  <option value="all">كل الطلبات</option>
+                  <option value="full">بالحاضر</option>
+                  <option value="installment">بالتقسيط</option>
+                </select>
+                <span className="text-sm text-gold-600">{filteredPurchases.length} طلب</span>
+              </div>
             </div>
 
             <div className="hidden md:block overflow-x-auto -mx-2 rounded-xl border-2 border-gold-200 overflow-hidden">
@@ -813,19 +829,25 @@ export default function AdminDashboard() {
                   <tr className="border-b-2 border-gold-200 bg-gold-50/80">
                     <th className="px-3 py-3 text-right text-xs font-semibold text-gold-800">المشروع</th>
                     <th className="px-3 py-3 text-right text-xs font-semibold text-gold-800">المستخدم</th>
+                    <th className="px-3 py-3 text-right text-xs font-semibold text-gold-800">الدفع</th>
                     <th className="px-3 py-3 text-right text-xs font-semibold text-gold-800">الحالة</th>
                     <th className="px-3 py-3 text-right text-xs font-semibold text-gold-800">التاريخ</th>
                     <th className="px-3 py-3 text-right text-xs font-semibold text-gold-800">الإجراءات</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-gold-100 bg-white">
-                  {directPurchases.map((purchase) => {
+                  {filteredPurchases.map((purchase) => {
                     const profile = purchase.profiles || {}
                     const project = purchase.projects || {}
                     return (
                       <tr key={purchase.id} className="hover:bg-gold-50/50 transition-colors">
                         <td className="px-3 py-3 text-sm">{project.name || '—'}</td>
                         <td className="px-3 py-3 text-sm">{profile.name || profile.email || '—'}</td>
+                        <td className="px-3 py-3">
+                          <span className={`inline-flex px-2.5 py-1 rounded-lg text-xs font-medium ${purchase.payment_type === 'installment' ? 'bg-amber-100 text-amber-800' : 'bg-gray-100 text-gray-700'}`}>
+                            {purchase.payment_type === 'installment' ? 'بالتقسيط' : 'بالحاضر'}
+                          </span>
+                        </td>
                         <td className="px-3 py-3">
                           <select
                             value={purchase.status}
@@ -904,7 +926,7 @@ export default function AdminDashboard() {
             </div>
 
             <div className="md:hidden space-y-5">
-              {directPurchases.map((purchase) => {
+              {filteredPurchases.map((purchase) => {
                 const profile = purchase.profiles || {}
                 const project = purchase.projects || {}
                 return (
@@ -913,6 +935,9 @@ export default function AdminDashboard() {
                       <div>
                         <p className="text-lg font-bold text-gold-900">{project.name || '—'}</p>
                         <p className="text-sm text-gold-600 mt-0.5">{profile.name || profile.email || '—'}</p>
+                        <span className={`inline-flex mt-2 px-2.5 py-1 rounded-lg text-xs font-medium ${purchase.payment_type === 'installment' ? 'bg-amber-100 text-amber-800' : 'bg-gray-100 text-gray-700'}`}>
+                          {purchase.payment_type === 'installment' ? 'بالتقسيط' : 'بالحاضر'}
+                        </span>
                       </div>
                       <span className={`shrink-0 px-3 py-1.5 rounded-xl text-sm font-medium ${
                         purchase.status === 'approved' ? 'bg-green-100 text-green-800' :
@@ -996,7 +1021,8 @@ export default function AdminDashboard() {
               })}
             </div>
           </div>
-        )}
+          )
+        })()}
 
         {/* تبويب المشاريع */}
         {activeTab === 'projects' && (
@@ -1728,11 +1754,31 @@ export default function AdminDashboard() {
               </button>
             </div>
             <div className="p-5 space-y-4">
+              {showDetailApp.direct_purchase_id && (() => {
+                const linkedPurchase = directPurchases.find((p: any) => p.id === showDetailApp.direct_purchase_id)
+                const project = linkedPurchase?.projects as any
+                if (!linkedPurchase) return null
+                return (
+                  <div className="rounded-xl border-2 border-amber-200 bg-amber-50 p-4">
+                    <p className="text-sm font-semibold text-amber-900 mb-1">مرتبط بطلب شراء بالتقسيط</p>
+                    <p className="text-xs text-amber-800 mb-2">{project?.name || 'طلب شراء'}</p>
+                    <button
+                      type="button"
+                      onClick={() => { setShowDetailApp(null); setShowPurchaseDetail(linkedPurchase) }}
+                      className="text-sm font-medium text-amber-700 hover:underline"
+                    >
+                      عرض طلب الشراء ←
+                    </button>
+                  </div>
+                )
+              })()}
               <div>
                 <h4 className="text-sm font-semibold text-gray-700 mb-2">المعطيات الشخصية</h4>
                 <dl className="grid grid-cols-1 gap-2 text-sm">
                   <div><dt className="text-gray-500">الاسم</dt><dd className="font-medium text-gray-900">{showDetailApp.first_name} {showDetailApp.last_name}</dd></div>
-                  <div><dt className="text-gray-500">البريد</dt><dd className="font-medium text-gray-900">{showDetailApp.email || '—'}</dd></div>
+                  {!(showDetailApp.email && String(showDetailApp.email).endsWith('@domobat.user')) && (
+                    <div><dt className="text-gray-500">البريد</dt><dd className="font-medium text-gray-900">{showDetailApp.email || '—'}</dd></div>
+                  )}
                   <div><dt className="text-gray-500">رقم البطاقة</dt><dd className="font-medium text-gray-900">{showDetailApp.national_id || '—'}</dd></div>
                   <div><dt className="text-gray-500">تاريخ الولادة</dt><dd className="font-medium text-gray-900">{showDetailApp.date_of_birth ? new Date(showDetailApp.date_of_birth).toLocaleDateString('ar-TN') : '—'}</dd></div>
                   <div><dt className="text-gray-500">الحالة الاجتماعية</dt><dd className="font-medium text-gray-900">{MARITAL_STATUS_LABELS[showDetailApp.marital_status] || showDetailApp.marital_status || '—'}</dd></div>
@@ -2001,6 +2047,27 @@ export default function AdminDashboard() {
                 <p className="text-sm text-gray-500">المستخدم</p>
                 <p className="font-medium text-gray-900">{(showPurchaseDetail.profiles || {}).name || (showPurchaseDetail.profiles || {}).email || '—'}</p>
               </div>
+              <div>
+                <p className="text-sm text-gray-500">طريقة الدفع</p>
+                <p className="font-medium text-gray-900">{showPurchaseDetail.payment_type === 'installment' ? 'بالتقسيط' : 'بالحاضر'}</p>
+              </div>
+              {(() => {
+                const linkedApp = applications.find((a: any) => a.direct_purchase_id === showPurchaseDetail.id)
+                if (!linkedApp) return null
+                return (
+                  <div className="rounded-xl border-2 border-primary-200 bg-primary-50 p-4">
+                    <p className="text-sm font-semibold text-primary-900 mb-1">استمارة مرتبطة</p>
+                    <p className="text-xs text-primary-700 mb-2">تم ربط استمارة سكن بهذا الطلب (تقسيط).</p>
+                    <button
+                      type="button"
+                      onClick={() => { setShowPurchaseDetail(null); setShowDetailApp(linkedApp) }}
+                      className="text-sm font-medium text-primary-600 hover:underline"
+                    >
+                      عرض الاستمارة ←
+                    </button>
+                  </div>
+                )
+              })()}
               {showPurchaseDetail.form_data && (
                 <div>
                   <h4 className="text-sm font-semibold text-gray-700 mb-2">بيانات النموذج</h4>

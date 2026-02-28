@@ -216,7 +216,7 @@ export default function ChatWidget() {
         <>
           {/* Backdrop: desktop only, clean dim */}
           <div
-            className="fixed inset-0 z-[9997] bg-black/20 sm:block hidden"
+            className="fixed inset-0 z-[9997] bg-black/30"
             aria-hidden
             onClick={() => closeChat()}
           />

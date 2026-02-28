@@ -68,14 +68,14 @@ export default function LoginPage() {
   }
 
   const LAYOUT_MAX = 'max-w-[28rem] mx-auto px-4 sm:px-5'
-  const LOGO_SIZE = 120
+  const LOGO_SIZE = 200
 
   return (
     <div className="min-h-screen bg-gold-50 flex flex-col min-h-[100dvh]">
       <nav className="sticky top-0 z-50 bg-gold-50/95 border-b-2 border-gold-300 flex items-center min-h-[8rem] safe-top">
         <div className={`${LAYOUT_MAX} w-full flex items-center justify-between gap-3`}>
           <Link href="/" className="flex items-center shrink-0 touch-manipulation" aria-label="DOMOBAT">
-            <Image src="/logo.png" alt="DOMOBAT" width={LOGO_SIZE} height={LOGO_SIZE} className="rounded-2xl w-[7.5rem] h-[7.5rem] object-contain" style={{ width: 'auto', height: 'auto' }} priority sizes="120px" />
+            <Image src="/logo.png" alt="DOMOBAT" width={LOGO_SIZE} height={LOGO_SIZE} className="rounded-2xl w-36 h-36 sm:w-40 sm:h-40 object-contain shrink-0 max-h-[8rem]" style={{ width: 'auto', height: 'auto' }} priority sizes="160px" />
           </Link>
           <Link href="/" className="flex items-center gap-2 min-h-[2.75rem] text-gold-900 hover:text-gold-950 text-sm font-medium touch-manipulation active:opacity-80">
             <ArrowRight className="w-4 h-4 shrink-0" />

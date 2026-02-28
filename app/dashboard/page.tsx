@@ -1,7 +1,7 @@
 'use client'
 
 import { useEffect, useState, useRef, Suspense } from 'react'
-import { useRouter } from 'next/navigation'
+import { useRouter, useSearchParams } from 'next/navigation'
 import { supabase } from '@/lib/supabase'
 import Link from 'next/link'
 import { FileText, Home, TrendingUp, LogOut, User, Plus } from 'lucide-react'
@@ -10,6 +10,7 @@ import { ApplicantDashboardContent } from '@/app/dashboard/applicant/_page_full'
 
 export default function DashboardPage() {
   const router = useRouter()
+  const searchParams = useSearchParams()
   const [user, setUser] = useState<any>(null)
   const [profile, setProfile] = useState<any>(null)
   const [loading, setLoading] = useState(true)
@@ -155,8 +156,20 @@ export default function DashboardPage() {
     )
   }
 
-  // Applicant: show applicant dashboard on /dashboard (no redirect to /dashboard/applicant)
+  // Applicant: projects is main page — redirect /dashboard to /projects unless opening "طلباتي" (view=requests) or profile/form
   if (profile.role === 'applicant') {
+    const view = searchParams?.get('view')
+    const tab = searchParams?.get('tab')
+    const form = searchParams?.get('form')
+    const showRequests = view === 'requests' || tab === 'profile' || form === '1'
+    if (!showRequests) {
+      router.replace('/projects')
+      return (
+        <div className="min-h-screen flex items-center justify-center bg-surface">
+          <div className="spinner w-8 h-8 text-primary-600" />
+        </div>
+      )
+    }
     return (
       <Suspense fallback={<div className="min-h-screen flex items-center justify-center bg-surface"><div className="spinner w-8 h-8 text-primary-600" /></div>}>
         <ApplicantDashboardContent />

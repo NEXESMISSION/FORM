@@ -5,10 +5,9 @@ import { useRouter } from 'next/navigation'
 import { supabase } from '@/lib/supabase'
 import Link from 'next/link'
 import Image from 'next/image'
-import { ShoppingCart, Building2, X, Search, ChevronDown, Settings } from 'lucide-react'
+import { Building2, Search, ChevronDown, Settings } from 'lucide-react'
 import toast from 'react-hot-toast'
 import BottomNav from '@/components/BottomNav'
-import DirectPurchaseForm from '@/components/DirectPurchaseForm'
 
 // Simplified filter: one dropdown. "construction" groups 90/180/365.
 const STATUS_OPTIONS: { value: string; label: string }[] = [
@@ -26,7 +25,6 @@ export default function ProjectsPage() {
   const [loading, setLoading] = useState(true)
   const [user, setUser] = useState<any>(null)
   const [profile, setProfile] = useState<{ role: string } | null>(null)
-  const [purchaseModalProject, setPurchaseModalProject] = useState<any>(null)
 
   useEffect(() => {
     loadProjects()
@@ -41,6 +39,14 @@ export default function ProjectsPage() {
         setProfile(null)
       }
     })
+  }, [])
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return
+    if (sessionStorage.getItem('domobat_show_welcome') === '1') {
+      sessionStorage.removeItem('domobat_show_welcome')
+      toast.success('مرحباً بك! اختر مشروعاً لبدء طلبك.')
+    }
   }, [])
 
   const loadProjects = async () => {
@@ -71,13 +77,14 @@ export default function ProjectsPage() {
       )
     : projects
 
-  const openPurchaseModal = (proj: any) => {
-    if (!user) {
-      toast.error('يرجى تسجيل الدخول أولاً')
-      return
-    }
-    setPurchaseModalProject(proj)
-  }
+  // Group by city (governorate), keep order stable
+  const projectsByCity = filteredProjects.reduce<Record<string, typeof filteredProjects>>((acc, p) => {
+    const city = (p.governorate || '').trim() || 'أخرى'
+    if (!acc[city]) acc[city] = []
+    acc[city].push(p)
+    return acc
+  }, {})
+  const cityOrder = [...new Set(filteredProjects.map((p) => (p.governorate || '').trim() || 'أخرى'))]
 
   const getStatusLabel = (status: string) => {
     const map: Record<string, string> = {
@@ -120,153 +127,138 @@ export default function ProjectsPage() {
     return `متبقي ${days} يوم`
   }
 
+  const LAYOUT_MAX = 'max-w-[28rem] mx-auto px-4 sm:px-5'
+
   return (
-    <div className="min-h-screen bg-surface">
-      <header className="sticky top-0 z-10 bg-white/95 backdrop-blur border-b border-gray-100">
-        <div className="max-w-[28rem] mx-auto px-4 h-14 flex items-center justify-center relative">
-          <Image src="/logo.png" alt="DOMOBAT" width={112} height={112} className="rounded-2xl w-auto h-auto" style={{ width: 'auto', height: 'auto' }} priority />
-          {profile?.role === 'admin' && (
+    <div className="min-h-screen bg-gold-50 flex flex-col">
+      <header className="sticky top-0 z-10 bg-gold-50/95 border-b-2 border-gold-300 safe-top">
+        <div className={`${LAYOUT_MAX} w-full min-h-[8rem] flex items-center justify-between py-1.5`}>
+          <div className="w-12" />
+          <Image src="/logo.png" alt="DOMOBAT" width={200} height={200} className="rounded-2xl object-contain shrink-0 w-36 h-36 sm:w-40 sm:h-40 max-h-[8rem]" priority />
+          {profile?.role === 'admin' ? (
             <Link
               href="/dashboard/admin"
-              className="absolute left-4 flex items-center gap-2 px-3 py-2 rounded-xl bg-primary-100 text-primary-700 text-sm font-medium hover:bg-primary-200"
+              className="flex items-center gap-1.5 px-3 py-2 rounded-xl border-2 border-gold-400 bg-white text-gold-900 text-sm font-medium hover:bg-gold-50 hover:border-gold-500 transition-colors"
               aria-label="لوحة الإدارة"
             >
               <Settings className="w-4 h-4" />
               الإدارة
             </Link>
-          )}
+          ) : <div className="w-10" />}
         </div>
       </header>
 
-      <div className="max-w-[28rem] mx-auto px-4 py-6 pb-32">
-        <div className="mb-5">
-          <h1 className="text-xl font-bold text-gray-900 mb-1">شراء مباشر</h1>
-          <p className="text-gray-500 text-sm">تصفح المشاريع واطلب الشراء مباشرة</p>
-        </div>
+      <main className={`${LAYOUT_MAX} flex-1 w-full pt-6 pb-28`}>
+        <section className="mb-6 text-center sm:text-right">
+          <h1 className="text-lg font-bold text-gold-950">المشاريع</h1>
+          <p className="text-gold-900 text-sm mt-0.5">تصفح واحجز وحدة في مشاريع السكن الاقتصادي</p>
+        </section>
 
-        {/* Filter: dropdown + search */}
-        <div className="flex flex-col sm:flex-row gap-3 mb-6">
+        <section className="flex flex-col sm:flex-row gap-3 mb-6">
           <div className="relative flex-1">
-            <Search className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400 pointer-events-none" />
+            <Search className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gold-500 pointer-events-none" />
             <input
               type="text"
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
-              placeholder="بحث بالاسم أو الولاية..."
-              className="form-input pr-10 text-sm py-2.5"
+              placeholder="بحث (اسم، ولاية)..."
+              className="w-full pl-4 pr-10 py-2.5 text-sm bg-white border-2 border-gold-200 rounded-xl focus:border-gold-500 focus:ring-2 focus:ring-gold-400/30 outline-none transition placeholder:text-gold-400 text-gold-950"
             />
           </div>
-          <div className="relative min-w-[10rem]">
+          <div className="relative sm:w-40">
             <select
               value={statusFilter}
               onChange={(e) => setStatusFilter(e.target.value)}
-              className="form-input appearance-none pl-4 pr-10 py-2.5 text-sm bg-white w-full"
+              className="w-full pl-4 pr-9 py-2.5 text-sm bg-white border-2 border-gold-200 rounded-xl appearance-none focus:border-gold-500 focus:ring-2 focus:ring-gold-400/30 outline-none transition text-gold-900"
             >
               {STATUS_OPTIONS.map(({ value, label }) => (
                 <option key={value} value={value}>{label}</option>
               ))}
             </select>
-            <ChevronDown className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-500 pointer-events-none" aria-hidden />
+            <ChevronDown className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gold-500 pointer-events-none" aria-hidden />
           </div>
-        </div>
+        </section>
 
         {loading ? (
-          <div className="flex justify-center py-12">
-            <div className="spinner w-8 h-8" />
+          <div className="flex justify-center py-16">
+            <div className="spinner w-8 h-8 text-gold-600" />
           </div>
         ) : filteredProjects.length === 0 ? (
-          <div className="card rounded-3xl text-center py-12">
-            <Building2 className="w-14 h-14 text-gray-300 mx-auto mb-4" />
-            <p className="text-gray-500">{searchQuery.trim() ? 'لا توجد نتائج للبحث' : 'لا توجد مشاريع'}</p>
-          </div>
+          <section className="bg-white rounded-2xl border-2 border-gold-200 shadow-md p-10 text-center">
+            <Building2 className="w-12 h-12 text-gold-300 mx-auto mb-3" />
+            <p className="text-gold-800 text-sm">{searchQuery.trim() ? 'لا توجد نتائج' : 'لا توجد مشاريع حالياً'}</p>
+          </section>
         ) : (
-          <div className="space-y-3">
-            {filteredProjects.map((project, index) => (
-              <Link
-                key={project.id}
-                href={`/projects/${project.id}`}
-                className="card rounded-2xl flex gap-4 p-0 overflow-hidden active:scale-[0.99]"
-              >
-                <div className="w-24 h-24 sm:w-28 sm:h-28 shrink-0 bg-gray-100 relative overflow-hidden">
-                  {project.thumbnail_url ? (
-                    <Image
-                      src={project.thumbnail_url}
-                      alt=""
-                      fill
-                      className="object-cover"
-                      sizes="112px"
-                      priority={index === 0}
-                    />
-                  ) : (
-                    <div className="w-full h-full flex items-center justify-center">
-                      <Building2 className="w-10 h-10 text-gray-400" />
-                    </div>
-                  )}
-                </div>
-                <div className="flex-1 min-w-0 py-4 pe-4 flex flex-col justify-center">
-                  <h3 className="font-semibold text-gray-900 truncate">{project.name}</h3>
-                  <p className="text-sm text-gray-500 truncate">{project.governorate}، {project.district}</p>
-                  <div className="flex items-center gap-2 mt-1.5 flex-wrap">
-                    <span className={`px-2 py-0.5 rounded-lg text-xs font-medium ${getStatusColor(project.status)}`}>
-                      {getProjectTiming(project) === 'منتهي' ? 'منتهي' : getStatusLabel(project.status)}
-                    </span>
-                    {getProjectTiming(project) && (
-                      <span className="text-xs text-gray-600">{getProjectTiming(project)}</span>
-                    )}
-                    {project.expected_price && (
-                      <span className="text-sm font-medium text-primary-600">
-                        {Number(project.expected_price).toLocaleString()} د.ت
-                      </span>
-                    )}
+          <div className="space-y-8 pb-4" dir="rtl">
+            {cityOrder.filter((city) => projectsByCity[city]?.length).map((city) => (
+              <section key={city}>
+                <h2 className="text-base font-bold text-gold-950 mb-3 text-right">{city}</h2>
+                <div
+                  className="overflow-x-auto overflow-y-hidden -mx-4 px-4"
+                  style={{ WebkitOverflowScrolling: 'touch' }}
+                >
+                  <div className="flex gap-4 pb-2" style={{ direction: 'rtl' }}>
+                    {projectsByCity[city].map((project, index) => (
+                      <div
+                        key={project.id}
+                        className="flex-none w-[85%] max-w-[18rem] bg-white rounded-2xl border-2 border-gold-200 overflow-hidden shadow-md hover:shadow-lg hover:border-gold-300 transition-all"
+                      >
+                        <Link href={`/projects/${project.id}`} className="block">
+                          <div className="aspect-[21/10] bg-gold-100 relative overflow-hidden rounded-t-2xl">
+                            {(() => {
+                              const imgUrl = project.thumbnail_url || (Array.isArray(project.image_urls) && project.image_urls.length > 0 ? project.image_urls[0] : null)
+                              return imgUrl ? (
+                                <Image
+                                  src={imgUrl}
+                                  alt=""
+                                  fill
+                                  className="object-cover"
+                                  sizes="18rem"
+                                  priority={index === 0 && city === cityOrder[0]}
+                                  unoptimized={imgUrl?.includes('media.prefabex.com')}
+                                />
+                              ) : (
+                                <div className="absolute inset-0 flex items-center justify-center">
+                                  <Building2 className="w-12 h-12 text-gold-300" />
+                                </div>
+                              )
+                            })()}
+                          </div>
+                          <div className="p-3">
+                            <h3 className="font-semibold text-gold-950 line-clamp-2 text-sm">{project.name}</h3>
+                            <p className="text-xs text-gold-700 mt-0.5">{project.district || ''}</p>
+                            <div className="flex items-center gap-2 mt-2 flex-wrap">
+                              <span className={`px-2 py-0.5 rounded-lg text-xs font-medium ${getStatusColor(project.status)}`}>
+                                {getProjectTiming(project) === 'منتهي' ? 'منتهي' : getStatusLabel(project.status)}
+                              </span>
+                              {getProjectTiming(project) && getProjectTiming(project) !== 'منتهي' && (
+                                <span className="text-xs text-gold-600">{getProjectTiming(project)}</span>
+                              )}
+                              {project.expected_price && (
+                                <span className="text-xs font-semibold text-gold-700">
+                                  {Number(project.expected_price).toLocaleString()} د.ت
+                                </span>
+                              )}
+                            </div>
+                          </div>
+                        </Link>
+                        <div className="px-3 pb-3">
+                          <Link
+                            href={`/projects/${project.id}`}
+                            className="block w-full py-2.5 rounded-xl text-sm font-semibold bg-gradient-to-b from-gold-400 to-gold-600 text-white text-center shadow-md hover:from-gold-500 hover:to-gold-700 hover:shadow-lg active:scale-[0.99] transition-all"
+                          >
+                            احجز
+                          </Link>
+                        </div>
+                      </div>
+                    ))}
                   </div>
                 </div>
-                <div className="shrink-0 flex items-center pe-3">
-                  <button
-                    onClick={(e) => {
-                      e.preventDefault()
-                      openPurchaseModal(project)
-                    }}
-                    disabled={!user}
-                    className="action-circle-btn disabled:opacity-50"
-                    title="طلب شراء"
-                  >
-                    <ShoppingCart className="w-5 h-5" />
-                  </button>
-                </div>
-              </Link>
+              </section>
             ))}
           </div>
         )}
-      </div>
-      {/* Modal طلب شراء — centred for PWA */}
-      {purchaseModalProject && user && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm animate-fade-in" style={{ padding: 'max(1rem, env(safe-area-inset-top)) max(1rem, env(safe-area-inset-right)) max(1rem, env(safe-area-inset-bottom)) max(1rem, env(safe-area-inset-left))' }}>
-          <div className="bg-white w-full max-w-lg max-h-[90vh] overflow-y-auto rounded-3xl shadow-2xl animate-slide-up pb-28" style={{ margin: 'auto' }}>
-            <div className="sticky top-0 bg-white border-b border-gray-100 px-6 py-4 flex justify-between items-center z-10">
-              <div>
-                <h2 className="text-xl font-bold text-gray-900">طلب شراء</h2>
-                <p className="text-sm text-gray-500 mt-0.5">{purchaseModalProject.name}</p>
-              </div>
-              <button 
-                type="button" 
-                onClick={() => setPurchaseModalProject(null)} 
-                className="p-2 rounded-xl hover:bg-gray-100 transition-colors" 
-                aria-label="إغلاق"
-              >
-                <X className="w-5 h-5 text-gray-500" />
-              </button>
-            </div>
-            <div className="p-6 pb-32">
-              <DirectPurchaseForm
-                project={purchaseModalProject}
-                userId={user.id}
-                onSuccess={() => setPurchaseModalProject(null)}
-                onCancel={() => setPurchaseModalProject(null)}
-              />
-            </div>
-          </div>
-        </div>
-      )}
+      </main>
       {user && <BottomNav />}
     </div>
   )

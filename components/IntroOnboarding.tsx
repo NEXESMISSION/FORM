@@ -5,12 +5,11 @@ import Image from 'next/image'
 import { ChevronRight, ChevronLeft, Sparkles } from 'lucide-react'
 import { supabase } from '@/lib/supabase'
 
-const INTRO_STORAGE_KEY = 'domobat_has_seen_intro'
 const JUST_SIGNED_UP_KEY = 'domobat_just_signed_up'
 
 /**
  * Check if the current user has seen the intro.
- * Uses localStorage only to avoid 400 when profiles.has_seen_intro column is missing.
+ * Uses profiles.has_seen_intro in the database.
  * Returns true if user has seen intro, false otherwise.
  * Returns true by default if no user is logged in (to avoid showing intro on login page).
  * If sessionStorage has "just signed up" flag, returns false so onboarding always shows once after signup.
@@ -20,24 +19,33 @@ export async function hasSeenIntro(): Promise<boolean> {
     const { data: { user } } = await supabase.auth.getUser()
     if (!user) return true // No user = don't show intro
 
-    if (typeof window !== 'undefined') {
-      if (sessionStorage.getItem(JUST_SIGNED_UP_KEY) === '1') return false // Force show intro after signup
-      const stored = localStorage.getItem(INTRO_STORAGE_KEY)
-      return stored === 'true'
+    if (typeof window !== 'undefined' && sessionStorage.getItem(JUST_SIGNED_UP_KEY) === '1') {
+      return false // Force show intro once after signup
     }
-    return false
+
+    const { data: profile, error } = await supabase
+      .from('profiles')
+      .select('has_seen_intro')
+      .eq('id', user.id)
+      .maybeSingle()
+
+    if (error) return true // On error, don't block (don't show intro)
+    return profile?.has_seen_intro === true
   } catch {
     return true // On error, don't block (don't show intro)
   }
 }
 
 /**
- * Mark the intro as seen for the current user (localStorage only, no DB call to avoid 400).
+ * Mark the intro as seen for the current user (persist in database).
  */
 export async function setIntroSeen(): Promise<void> {
   try {
+    const { data: { user } } = await supabase.auth.getUser()
+    if (user) {
+      await supabase.from('profiles').update({ has_seen_intro: true }).eq('id', user.id)
+    }
     if (typeof window !== 'undefined') {
-      localStorage.setItem(INTRO_STORAGE_KEY, 'true')
       sessionStorage.removeItem(JUST_SIGNED_UP_KEY)
     }
   } catch {
@@ -46,12 +54,13 @@ export async function setIntroSeen(): Promise<void> {
 }
 
 /**
- * Reset intro status to show it again (e.g. "Watch intro again" button). Uses localStorage only.
+ * Reset intro status to show it again (e.g. "Watch intro again" button). Uses database.
  */
 export async function resetIntro(): Promise<void> {
   try {
-    if (typeof window !== 'undefined') {
-      localStorage.removeItem(INTRO_STORAGE_KEY)
+    const { data: { user } } = await supabase.auth.getUser()
+    if (user) {
+      await supabase.from('profiles').update({ has_seen_intro: false }).eq('id', user.id)
     }
   } catch {
     // ignore

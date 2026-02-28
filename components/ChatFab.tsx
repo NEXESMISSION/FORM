@@ -80,7 +80,7 @@ export default function ChatFab() {
       }
     : {
         right: PADDING,
-        bottom: `calc(5.5rem + env(safe-area-inset-bottom, 0px))`,
+        bottom: `calc(6.5rem + env(safe-area-inset-bottom, 0px))`,
         marginBottom: 0,
         marginRight: 0,
       }
@@ -95,7 +95,7 @@ export default function ChatFab() {
       onPointerUp={handlePointerUp}
       onPointerCancel={handlePointerUp}
       onKeyDown={(e) => e.key === 'Enter' && openChat()}
-      className="fixed z-[9995] flex h-12 w-12 cursor-grab active:cursor-grabbing items-center justify-center rounded-2xl border-2 border-primary-200 bg-primary-50 shadow-lg transition-shadow hover:shadow-xl hover:bg-primary-100 active:scale-95 focus:outline-none focus:ring-2 focus:ring-primary-400 focus:ring-offset-2"
+      className="fixed z-[9999] flex h-14 w-14 min-[480px]:h-12 min-[480px]:w-12 cursor-grab active:cursor-grabbing items-center justify-center rounded-2xl border-2 border-primary-200 bg-primary-50 shadow-lg transition-shadow hover:shadow-xl hover:bg-primary-100 active:scale-95 focus:outline-none focus:ring-2 focus:ring-primary-400 focus:ring-offset-2"
       style={style}
       aria-label="فتح الدردشة - اسحب لتحريك"
       title="دردشة دوموبات (اسحب لتحريك)"

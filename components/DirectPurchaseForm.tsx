@@ -1,9 +1,13 @@
 'use client'
 
-import { useState, useRef } from 'react'
+import { useState, useRef, useEffect } from 'react'
+import { useRouter } from 'next/navigation'
 import { supabase } from '@/lib/supabase'
 import toast from 'react-hot-toast'
-import { ShoppingCart, FileText, Upload, X, File } from 'lucide-react'
+import { ShoppingCart, FileText, Upload, X, File, Banknote, CreditCard } from 'lucide-react'
+
+// Fields we never show in the form — we use the logged-in user's account (profile) instead.
+const ACCOUNT_FIELDS = ['full_name', 'phone', 'email', 'notes']
 
 const FIELD_LABELS: Record<string, string> = {
   full_name: 'الاسم الكامل',
@@ -34,19 +38,28 @@ interface DocumentFile {
   id: string
 }
 
+type PaymentChoice = 'full' | 'installment'
+
 export default function DirectPurchaseForm({
   project,
   userId,
   onSuccess,
   onCancel,
 }: DirectPurchaseFormProps) {
-  const fields: string[] = Array.isArray(project.purchase_form_fields) && project.purchase_form_fields.length > 0
+  const router = useRouter()
+  // Only show fields that are not filled from account (no full_name, phone, email, notes in the form)
+  const allFields: string[] = Array.isArray(project.purchase_form_fields) && project.purchase_form_fields.length > 0
     ? project.purchase_form_fields
-    : ['full_name', 'phone', 'cin', 'email', 'notes']
+    : ['cin']
+  const fields: string[] = allFields.filter((key) => !ACCOUNT_FIELDS.includes(key))
+
+  // Documents: strictly per project — only show if this project defines required documents
   const docs: string[] = Array.isArray(project.purchase_required_documents) && project.purchase_required_documents.length > 0
     ? project.purchase_required_documents
-    : ['نسخة بطاقة التعريف', 'شهادة دخل أو عدم دخل']
+    : []
 
+  const [paymentType, setPaymentType] = useState<PaymentChoice>('full')
+  const [profile, setProfile] = useState<{ name?: string | null; phone_number?: string | null; email?: string | null } | null>(null)
   const [formData, setFormData] = useState<Record<string, string>>(
     fields.reduce((acc, key) => ({ ...acc, [key]: '' }), {})
   )
@@ -55,6 +68,11 @@ export default function DirectPurchaseForm({
   const [uploading, setUploading] = useState(false)
   const [submitting, setSubmitting] = useState(false)
   const fileInputRefs = useRef<Record<string, HTMLInputElement | null>>({})
+
+  useEffect(() => {
+    if (!userId) return
+    supabase.from('profiles').select('name, phone_number, email').eq('id', userId).maybeSingle().then(({ data }) => setProfile(data ?? null))
+  }, [userId])
 
   const handleChange = (key: string, value: string) => {
     setFormData((prev) => ({ ...prev, [key]: value }))
@@ -143,22 +161,40 @@ export default function DirectPurchaseForm({
         documentUrls = await uploadFiles()
       }
 
-      const { error } = await supabase.from('project_direct_purchases').insert({
+      // Merge account data (from profile) with form-only fields (e.g. cin, address)
+      const form_data: Record<string, string> = {
+        full_name: profile?.name ?? '',
+        phone: profile?.phone_number ?? '',
+        email: profile?.email ?? '',
+        ...formData,
+      }
+
+      const paymentTypeValue = paymentType === 'full' ? 'full' : 'installment'
+      const { data: inserted, error } = await supabase.from('project_direct_purchases').insert({
         user_id: userId,
         project_id: project.id,
         status: 'pending',
-        form_data: formData,
+        payment_type: paymentTypeValue,
+        form_data,
         documents_note: documentsNote.trim() || null,
         documents: documentUrls.length > 0 ? documentUrls : null,
-      })
+      }).select('id').single()
 
       if (error) throw error
-      toast.success('تم إرسال طلب الشراء. سنتواصل معك قريباً.')
-      onSuccess?.()
+      if (paymentType === 'full') {
+        toast.success('تم إرسال طلب الشراء. سنتواصل معك قريباً.')
+        onSuccess?.()
+      } else {
+        toast.success('تم تسجيل طلبك بالتقسيط. أكمل الاستمارة لإتمام الطلب.')
+        onSuccess?.()
+        const purchaseId = inserted?.id ? `&purchase_id=${inserted.id}` : ''
+        router.push(`/dashboard?form=1${purchaseId}`)
+      }
     } catch (e: any) {
       if (e?.code === '23505') {
         toast.success('لديك بالفعل طلب شراء لهذا المشروع.')
         onSuccess?.()
+        if (paymentType === 'installment') router.push('/dashboard?form=1')
       } else {
         toast.error(e?.message || 'فشل إرسال الطلب')
       }
@@ -169,45 +205,72 @@ export default function DirectPurchaseForm({
 
   return (
     <form onSubmit={handleSubmit} className="space-y-6">
-      {/* Form Fields Section */}
-      <div className="space-y-4">
-        <div className="border-b border-gray-100 pb-3">
-          <h3 className="text-sm font-semibold text-gray-900">المعلومات الشخصية</h3>
+      {/* Payment type: full or installment */}
+      <div className="space-y-3">
+        <h3 className="text-sm font-semibold text-gray-900">طريقة الدفع</h3>
+        <div className="grid grid-cols-2 gap-3">
+          <button
+            type="button"
+            onClick={() => setPaymentType('full')}
+            className={`flex items-center justify-center gap-2 py-3.5 px-4 rounded-xl border-2 text-sm font-medium transition-all touch-manipulation ${
+              paymentType === 'full'
+                ? 'border-primary-500 bg-primary-50 text-primary-800'
+                : 'border-gray-200 bg-white text-gray-600 hover:border-gray-300'
+            }`}
+          >
+            <Banknote className="w-5 h-5" />
+            بالحاضر
+          </button>
+          <button
+            type="button"
+            onClick={() => setPaymentType('installment')}
+            className={`flex items-center justify-center gap-2 py-3.5 px-4 rounded-xl border-2 text-sm font-medium transition-all touch-manipulation ${
+              paymentType === 'installment'
+                ? 'border-primary-500 bg-primary-50 text-primary-800'
+                : 'border-gray-200 bg-white text-gray-600 hover:border-gray-300'
+            }`}
+          >
+            <CreditCard className="w-5 h-5" />
+            بالتقسيط
+          </button>
         </div>
-        {fields.map((key) => (
-          <div key={key}>
-            <label className="form-label">
-              {FIELD_LABELS[key] || key}
-              {key !== 'notes' && <span className="text-red-500 mr-1">*</span>}
-            </label>
-            {key === 'notes' ? (
-              <textarea
-                value={formData[key] ?? ''}
-                onChange={(e) => handleChange(key, e.target.value)}
-                className="form-input min-h-[100px] resize-none"
-                placeholder="اختياري"
-                rows={4}
-              />
-            ) : (
+        {paymentType === 'installment' && (
+          <p className="text-xs text-gray-500">بعد الإرسال ستُوجّه لاستكمال استمارة التقسيط.</p>
+        )}
+      </div>
+
+      {/* Account info is used automatically — no full_name, phone, email, notes fields */}
+      <p className="text-sm text-gray-500">الاسم ورقم الهاتف والبريد الإلكتروني من حسابك سيُستخدمان تلقائياً.</p>
+
+      {/* Only show extra form fields per project (e.g. CIN, address) */}
+      {fields.length > 0 && (
+        <div className="space-y-4">
+          <h3 className="text-sm font-semibold text-gray-900">معلومات إضافية</h3>
+          {fields.map((key) => (
+            <div key={key}>
+              <label className="form-label">
+                {FIELD_LABELS[key] || key}
+                <span className="text-red-500 mr-1">*</span>
+              </label>
               <input
-                type={key === 'email' ? 'email' : 'text'}
+                type="text"
                 value={formData[key] ?? ''}
                 onChange={(e) => handleChange(key, e.target.value)}
                 className="form-input"
                 placeholder={FIELD_LABELS[key] || key}
-                required={key !== 'notes'}
+                required
               />
-            )}
-          </div>
-        ))}
-      </div>
+            </div>
+          ))}
+        </div>
+      )}
 
-      {/* Documents Section */}
+      {/* Documents: only when this project defines required documents (per-project control) */}
       {docs.length > 0 && (
         <div className="space-y-4 pt-4 border-t border-gray-100">
           <div className="flex items-center gap-2 mb-4">
             <FileText className="w-5 h-5 text-primary-600" />
-            <h3 className="text-sm font-semibold text-gray-900">الوثائق المطلوبة</h3>
+            <h3 className="text-sm font-semibold text-gray-900">الوثائق المطلوبة لهذا المشروع</h3>
           </div>
 
           <div className="space-y-4">
@@ -235,7 +298,6 @@ export default function DirectPurchaseForm({
                     <Upload className="w-5 h-5 text-gray-500" />
                     <span className="text-sm font-medium text-gray-600">اختر ملفات (يمكن رفع عدة ملفات)</span>
                   </label>
-                  
                   {docFiles.length > 0 && (
                     <div className="space-y-2 mt-2">
                       {docFiles.map((file) => (

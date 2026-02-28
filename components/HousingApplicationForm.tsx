@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useCallback, useRef } from 'react'
 import dynamic from 'next/dynamic'
-import { useRouter } from 'next/navigation'
+import { useRouter, useSearchParams } from 'next/navigation'
 import { supabase } from '@/lib/supabase'
 import toast from 'react-hot-toast'
 import { Save, ArrowRight, ArrowLeft, Mic, MicOff, Trash2, Loader2 } from 'lucide-react'
@@ -115,6 +115,8 @@ function getStorageKey(userId: string | null): string {
 
 export default function HousingApplicationForm() {
   const router = useRouter()
+  const searchParams = useSearchParams()
+  const linkedPurchaseId = searchParams?.get('purchase_id') || null
   const formTopRef = useRef<HTMLDivElement>(null)
   const [currentSection, setCurrentSection] = useState(1)
   const [loading, setLoading] = useState(false)
@@ -459,6 +461,7 @@ export default function HousingApplicationForm() {
       const payload: any = {
         user_id: user.id,
         status: 'in_progress',
+        direct_purchase_id: linkedPurchaseId || null,
         first_name: first || '—',
         last_name: last || '—',
         national_id: formData.national_id || '',
@@ -624,7 +627,7 @@ export default function HousingApplicationForm() {
       // Use a small delay to ensure toast is shown, then redirect
       // Use window.location for more reliable redirect
       setTimeout(() => {
-        window.location.href = '/dashboard'
+        window.location.href = '/dashboard?view=requests'
       }, 800)
     } catch (error: any) {
       // Error handling is done in the if (error) block above
@@ -681,6 +684,11 @@ export default function HousingApplicationForm() {
 
   return (
     <div ref={formTopRef} className="max-w-[28rem] mx-auto px-4 py-6 pb-32 touch-manipulation" style={{ touchAction: 'manipulation' }}>
+      {linkedPurchaseId && (
+        <div className="mb-4 rounded-2xl border-2 border-primary-200 bg-primary-50 p-4">
+          <p className="text-sm font-medium text-primary-900">استمارة مرتبطة بطلب شراء بالتقسيط. أكمل البيانات لإتمام الطلب.</p>
+        </div>
+      )}
       <div className="card rounded-3xl shadow-soft relative bg-white">
         <div className="mb-6">
           <h1 className="text-xl font-bold text-gray-900 mb-1">استمارة رقمية</h1>

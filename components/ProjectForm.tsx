@@ -26,6 +26,7 @@ export default function ProjectForm({ project, onClose, onSuccess }: ProjectForm
     name: project?.name || '',
     description: project?.description || '',
     thumbnail_url: project?.thumbnail_url || '',
+    image_urls: Array.isArray(project?.image_urls) ? project.image_urls.join('\n') : '',
     governorate: project?.governorate || '',
     district: project?.district || '',
     location_lat: project?.location_lat || '',
@@ -43,6 +44,14 @@ export default function ProjectForm({ project, onClose, onSuccess }: ProjectForm
     project_duration_months: project?.project_duration_months || '',
     expected_return_percentage: project?.expected_return_percentage || '',
     risk_level: project?.risk_level || 'medium',
+    purchase_form_fields: (() => {
+      const arr = Array.isArray(project?.purchase_form_fields) ? project.purchase_form_fields : ['cin']
+      const allowed = arr.filter((f: string) => ['cin', 'address'].includes(f))
+      return allowed.length > 0 ? allowed : ['cin']
+    })(),
+    purchase_required_documents: Array.isArray(project?.purchase_required_documents)
+      ? project.purchase_required_documents.join('\n')
+      : (project?.purchase_required_documents == null ? 'نسخة بطاقة التعريف\nشهادة دخل أو عدم دخل' : ''),
   })
 
   const updateField = (field: string, value: any) => {
@@ -60,7 +69,20 @@ export default function ProjectForm({ project, onClose, onSuccess }: ProjectForm
         return
       }
 
-      const submitData: any = {
+      const purchaseDocsText = typeof formData.purchase_required_documents === 'string'
+        ? formData.purchase_required_documents
+        : ''
+      const purchase_required_documents = purchaseDocsText
+        .split('\n')
+        .map((s: string) => s.trim())
+        .filter(Boolean)
+
+      const imageUrlsRaw = typeof formData.image_urls === 'string' ? formData.image_urls : ''
+        const image_urls = imageUrlsRaw
+          .split('\n')
+          .map((s: string) => s.trim())
+          .filter(Boolean)
+        const submitData: any = {
         ...formData,
         number_of_units: parseInt(formData.number_of_units) || 0,
         expected_price: formData.expected_price ? parseFloat(formData.expected_price) : null,
@@ -75,6 +97,9 @@ export default function ProjectForm({ project, onClose, onSuccess }: ProjectForm
         start_date: formData.start_date || null,
         delivery_date: formData.delivery_date || null,
         created_by: user.id,
+        purchase_form_fields: Array.isArray(formData.purchase_form_fields) ? formData.purchase_form_fields : [],
+        purchase_required_documents: purchase_required_documents.length > 0 ? purchase_required_documents : null,
+        image_urls: image_urls.length > 0 ? image_urls : null,
       }
 
       if (project) {
@@ -137,7 +162,7 @@ export default function ProjectForm({ project, onClose, onSuccess }: ProjectForm
             </div>
 
             <div className="md:col-span-2">
-              <label className="form-label">رابط صورة المشروع (صورة مصغرة)</label>
+              <label className="form-label">رابط صورة مصغرة (للبطاقة والقائمة)</label>
               <input
                 type="url"
                 value={formData.thumbnail_url}
@@ -145,6 +170,17 @@ export default function ProjectForm({ project, onClose, onSuccess }: ProjectForm
                 className="form-input"
                 placeholder="https://... أو اترك فارغاً"
               />
+            </div>
+            <div className="md:col-span-2">
+              <label className="form-label">صور المشروع (رابط واحد في كل سطر — يمكن إضافة عدة صور)</label>
+              <textarea
+                value={typeof formData.image_urls === 'string' ? formData.image_urls : (Array.isArray(formData.image_urls) ? formData.image_urls.join('\n') : '')}
+                onChange={(e) => updateField('image_urls', e.target.value)}
+                className="form-input min-h-[120px] font-mono text-sm"
+                placeholder="https://example.com/image1.jpg&#10;https://example.com/image2.jpg"
+                rows={4}
+              />
+              <p className="text-xs text-gray-500 mt-1">سطر واحد لكل صورة. تُعرض في صفحة تفاصيل المشروع.</p>
             </div>
 
             <div>
@@ -351,6 +387,48 @@ export default function ProjectForm({ project, onClose, onSuccess }: ProjectForm
                 <option value="medium">متوسط</option>
                 <option value="high">عالي</option>
               </select>
+            </div>
+
+            <div className="md:col-span-2 mt-4 pt-4 border-t border-gray-200">
+              <h3 className="text-sm font-semibold text-gray-900 mb-3">استمارة الشراء المباشر (لكل مشروع)</h3>
+              <p className="text-xs text-gray-500 mb-3">الاسم والهاتف والبريد تُؤخذ من حساب المستخدم. اختر الحقول الإضافية والوثائق المطلوبة لهذا المشروع فقط.</p>
+              <div className="space-y-2 mb-4">
+                <label className="flex items-center gap-2 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={Array.isArray(formData.purchase_form_fields) && formData.purchase_form_fields.includes('cin')}
+                    onChange={(e) => {
+                      const arr = Array.isArray(formData.purchase_form_fields) ? [...formData.purchase_form_fields] : []
+                      if (e.target.checked) updateField('purchase_form_fields', [...arr.filter((x: string) => x !== 'cin'), 'cin'])
+                      else updateField('purchase_form_fields', arr.filter((x: string) => x !== 'cin'))
+                    }}
+                    className="rounded border-gray-300"
+                  />
+                  <span className="text-sm text-gray-700">طلب رقم بطاقة التعريف (CIN)</span>
+                </label>
+                <label className="flex items-center gap-2 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={Array.isArray(formData.purchase_form_fields) && formData.purchase_form_fields.includes('address')}
+                    onChange={(e) => {
+                      const arr = Array.isArray(formData.purchase_form_fields) ? [...formData.purchase_form_fields] : []
+                      if (e.target.checked) updateField('purchase_form_fields', [...arr.filter((x: string) => x !== 'address'), 'address'])
+                      else updateField('purchase_form_fields', arr.filter((x: string) => x !== 'address'))
+                    }}
+                    className="rounded border-gray-300"
+                  />
+                  <span className="text-sm text-gray-700">طلب العنوان</span>
+                </label>
+              </div>
+              <label className="form-label">الوثائق المطلوبة لهذا المشروع (سطر واحد لكل مستند)</label>
+              <textarea
+                value={typeof formData.purchase_required_documents === 'string' ? formData.purchase_required_documents : ''}
+                onChange={(e) => updateField('purchase_required_documents', e.target.value)}
+                className="form-input min-h-[100px] font-mono text-sm"
+                placeholder="نسخة بطاقة التعريف&#10;شهادة دخل أو عدم دخل"
+                rows={4}
+              />
+              <p className="text-xs text-gray-500 mt-1">اترك فارغاً إن لم ترد طلب وثائق لهذا المشروع.</p>
             </div>
           </div>
 
